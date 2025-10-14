@@ -8,9 +8,7 @@ dotenv.config();
 const roles = [
   { name: 'SuperAdmin', permissions: ['*'] },
   { name: 'Admin', permissions: ['manage-users', 'view-finance'] },
-  { name: 'Finance Manager', permissions: ['view-finance', 'edit-finance'] },
-  { name: 'Finance Staff', permissions: ['view-finance'] },
-  { name: 'HR', permissions: ['manage-employees', 'view-salary'] },
+  { name: 'User', permissions: ['view-finance', 'edit-finance'] },
   // You can add more roles below any time:
 ];
 
