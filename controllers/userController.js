@@ -3,15 +3,22 @@ const Role = require("../models/Role");
 
 // Get all users
 exports.getAllUsers = async (req, res) => {
-  const users = await User.find().populate("role");
-  res.json(users);
+  try {
+    const users = await User.find()
+      .populate("role", "name") // populate role name
+      .lean();
+    res.status(200).json({ success: true, data: users });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 // Create user
 exports.createUser = async (req, res) => {
   try {
     const {
-      name,
+      firstName,
+      lastName,
       email,
       password,
       roleName,
@@ -30,7 +37,8 @@ exports.createUser = async (req, res) => {
       return res.status(400).json({ message: "Email already exists" });
 
     const user = await User.create({
-      name,
+      firstName,
+      lastName,
       email,
       password,
       role: role._id,
@@ -45,10 +53,10 @@ exports.createUser = async (req, res) => {
       },
     });
 
-    res.status(201).json(user);
+    res.status(200).json({ success: true, data: users });
   } catch (error) {
     console.error("❌ Error creating user:", error.message);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -92,7 +100,7 @@ exports.updateUser = async (req, res) => {
     }
 
     await user.save();
-    res.json(user);
+    res.status(200).json({ success: true, data: user });
   } catch (error) {
     console.error("❌ Error updating user:", error.message);
     res.status(500).json({ message: "Server error" });
@@ -104,5 +112,5 @@ exports.deleteUser = async (req, res) => {
   const user = await User.findById(req.params.id);
   if (!user) return res.status(404).json({ message: "User not found" });
   await user.deleteOne();
-  res.json({ message: "User deleted" });
+  res.status(200).json({ success: true, message: "User deleted" });
 };

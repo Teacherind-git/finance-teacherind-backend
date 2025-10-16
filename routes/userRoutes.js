@@ -4,9 +4,9 @@ const { protect, authorizeRoles } = require('../middlewares/authMiddleware');
 const { getAllUsers, createUser, updateUser, deleteUser } = require('../controllers/userController');
 
 router.use(protect);
-router.get('/', authorizeRoles('admin'), getAllUsers);
-router.post('/', authorizeRoles('admin'), createUser);
-router.put('/:id', authorizeRoles('admin'), updateUser);
-router.delete('/:id', authorizeRoles('admin'), deleteUser);
+router.get('/', authorizeRoles('SuperAdmin', 'Admin'), getAllUsers);
+router.post('/', authorizeRoles('SuperAdmin'), createUser);
+router.put('/:id', authorizeRoles('SuperAdmin'), updateUser);
+router.delete('/:id', authorizeRoles('SuperAdmin'), deleteUser);
 
 module.exports = router;
