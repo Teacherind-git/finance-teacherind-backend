@@ -1,19 +1,22 @@
 const User = require("../models/User");
 const Role = require("../models/Role");
 
-// Get all users
+// ✅ Get all users
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.find()
-      .populate("role", "name") // populate role name
-      .lean();
+    const users = await User.findAll({
+      include: [{ model: Role, as: "role", attributes: ["name"] }],
+      order: [["id", "ASC"]],
+    });
+
     res.status(200).json({ success: true, data: users });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("❌ Error fetching users:", error.message);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Create user
+// ✅ Create user
 exports.createUser = async (req, res) => {
   try {
     const {
@@ -26,91 +29,102 @@ exports.createUser = async (req, res) => {
       position,
       phone,
       taxId,
-      address, // { country, state, postalCode }
+      address, // { country, state, postalCode, ... }
     } = req.body;
 
-    const role = await Role.findOne({ name: roleName });
-    if (!role) return res.status(400).json({ message: "Invalid role" });
+    // Check role
+    const role = await Role.findOne({ where: { name: roleName } });
+    if (!role)
+      return res.status(400).json({ success: false, message: "Invalid role" });
 
-    const existing = await User.findOne({ email });
+    // Check if user already exists
+    const existing = await User.findOne({ where: { email } });
     if (existing)
-      return res.status(400).json({ message: "Email already exists" });
+      return res.status(400).json({ success: false, message: "Email already exists" });
 
+    // Create new user
     const user = await User.create({
       firstName,
       lastName,
       email,
       password,
-      role: role._id,
+      roleId: role.id,
       department: department || "",
       position: position || "",
       phone: phone || "",
       taxId: taxId || "",
-      address: {
-        country: address?.country || "",
-        state: address?.state || "",
-        postalCode: address?.postalCode || "",
-      },
+      address: address || {},
     });
 
-    res.status(200).json({ success: true, data: users });
+    res.status(201).json({ success: true, data: user });
   } catch (error) {
     console.error("❌ Error creating user:", error.message);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Update user
+// ✅ Update user
 exports.updateUser = async (req, res) => {
   try {
     const {
-      name,
+      firstName,
+      lastName,
       email,
       roleName,
       department,
       position,
       phone,
       taxId,
-      address, // { country, state, postalCode }
+      address,
     } = req.body;
 
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    const user = await User.findByPk(req.params.id);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
 
     // Update role if provided
     if (roleName) {
-      const role = await Role.findOne({ name: roleName });
-      if (!role) return res.status(400).json({ message: "Invalid role" });
-      user.role = role._id;
+      const role = await Role.findOne({ where: { name: roleName } });
+      if (!role)
+        return res.status(400).json({ success: false, message: "Invalid role" });
+      user.roleId = role.id;
     }
 
-    // Update basic fields
-    user.name = name || user.name;
+    // Update fields
+    user.firstName = firstName || user.firstName;
+    user.lastName = lastName || user.lastName;
     user.email = email || user.email;
     user.department = department || user.department;
     user.position = position || user.position;
     user.phone = phone || user.phone;
     user.taxId = taxId || user.taxId;
 
-    // Update address if provided
     if (address) {
-      user.address.country = address.country || user.address.country;
-      user.address.state = address.state || user.address.state;
-      user.address.postalCode = address.postalCode || user.address.postalCode;
+      // Merge new address fields with existing ones
+      user.address = { ...user.address, ...address };
     }
 
     await user.save();
+
     res.status(200).json({ success: true, data: user });
   } catch (error) {
     console.error("❌ Error updating user:", error.message);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// Delete user
+// ✅ Delete user
 exports.deleteUser = async (req, res) => {
-  const user = await User.findById(req.params.id);
-  if (!user) return res.status(404).json({ message: "User not found" });
-  await user.deleteOne();
-  res.status(200).json({ success: true, message: "User deleted" });
+  try {
+    const user = await User.findByPk(req.params.id);
+    if (!user)
+      return res.status(404).json({ success: false, message: "User not found" });
+
+    await user.destroy();
+
+    res.status(200).json({ success: true, message: "User deleted successfully" });
+  } catch (error) {
+    console.error("❌ Error deleting user:", error.message);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
 };

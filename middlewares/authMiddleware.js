@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Role = require('../models/Role');
 
 const protect = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -10,10 +11,19 @@ const protect = async (req, res, next) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).populate('role');
-    if (!req.user) return res.status(404).json({ message: 'User not found' });
+
+    // Fetch user with role
+    const user = await User.findOne({
+      where: { id: decoded.id },
+      include: [{ model: Role, as: 'role' }],
+    });
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    req.user = user;
     next();
   } catch (error) {
+    console.error(error);
     res.status(401).json({ message: 'Invalid token' });
   }
 };

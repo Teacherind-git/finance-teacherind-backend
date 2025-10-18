@@ -1,25 +1,23 @@
-const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const path = require("path");
 const bcrypt = require("bcryptjs");
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
+const { sequelize } = require("../../config/db");
 const User = require("../../models/User");
 const Role = require("../../models/Role");
 
 const createSuperAdmin = async () => {
   try {
-    if (!process.env.MONGO_URI) {
-      console.error("❌ MONGO_URI not found in .env file!");
-      process.exit(1);
-    }
+    await sequelize.authenticate();
+    console.log("✅ Connected to MySQL");
 
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("✅ Connected to MongoDB");
+    // Ensure tables exist
+    await sequelize.sync();
 
-    // Find SuperAdmin role
-    let superAdminRole = await Role.findOne({ name: "SuperAdmin" });
+    // Check or create SuperAdmin role
+    let superAdminRole = await Role.findOne({ where: { name: "SuperAdmin" } });
     if (!superAdminRole) {
       superAdminRole = await Role.create({
         name: "SuperAdmin",
@@ -28,20 +26,24 @@ const createSuperAdmin = async () => {
       console.log("🟢 Created SuperAdmin role");
     }
 
+    const email = process.env.SUPERADMIN_EMAIL || "superadmin@example.com";
+    const password = process.env.SUPERADMIN_PASSWORD || "SuperAdmin123!";
+
     // Check if SuperAdmin user exists
-    const existing = await User.findOne({ email: "superadmin@example.com" });
-    if (existing) {
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
       console.log("🟡 SuperAdmin user already exists");
+      await sequelize.close();
       process.exit(0);
     }
 
     // Create SuperAdmin user
-    const superAdmin = await User.create({
+    await User.create({
       firstName: "Super Admin",
       lastName: "",
-      email: "superadmin@example.com",
-      password: "SuperAdmin123!",
-      role: superAdminRole._id,
+      email,
+      password: password,
+      roleId: superAdminRole.id,
       position: "CEO",
       department: "Management",
       phone: "",
@@ -51,13 +53,16 @@ const createSuperAdmin = async () => {
     });
 
     console.log("🟢 SuperAdmin user created successfully:");
-    console.log("   Email: superadmin@example.com");
-    console.log("   Password: SuperAdmin123!");
-    console.log("   Position: CEO");
+    console.log(`   Email: ${email}`);
+    console.log(`   Password: ${password}`);
+    console.log("   Role: SuperAdmin");
 
+    await sequelize.close();
+    console.log("🔒 MySQL connection closed");
     process.exit(0);
   } catch (err) {
     console.error("❌ Error creating SuperAdmin:", err.message);
+    await sequelize.close();
     process.exit(1);
   }
 };

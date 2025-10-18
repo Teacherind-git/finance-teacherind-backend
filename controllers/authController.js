@@ -1,6 +1,6 @@
 const User = require("../models/User");
-const jwt = require("jsonwebtoken");
 const Role = require("../models/Role");
+const jwt = require("jsonwebtoken");
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "1d" });
@@ -9,41 +9,62 @@ const generateToken = (id) => {
 // ✅ Register new user
 exports.register = async (req, res) => {
   try {
-    const { name, email, password, roleName } = req.body;
+    const { firstName, lastName, email, password, roleName, department, position } = req.body;
 
-    if (!name || !email || !password || !roleName) {
-      return res
-        .status(400)
-        .json({ success: false, message: "All fields are required" });
+    // Validate input
+    if (!firstName || !email || !password || !roleName || !department || !position) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
     }
 
-    const role = await Role.findOne({ name: roleName });
-    if (!role)
-      return res.status(400).json({ success: false, message: "Invalid role" });
-
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-      return res
-        .status(400)
-        .json({ success: false, message: "User already exists" });
+    // Find role by name
+    const role = await Role.findOne({ where: { name: roleName } });
+    if (!role) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid role name",
+      });
     }
 
-    const user = await User.create({ name, email, password, role: role._id });
+    // Check if user already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists",
+      });
+    }
+
+    // Create user
+    const user = await User.create({
+      firstName,
+      lastName,
+      email,
+      password,
+      roleId: role.id,
+      department,
+      position,
+    });
 
     res.status(201).json({
       success: true,
       message: "User registered successfully",
       data: {
-        _id: user._id,
-        name: user.name,
+        id: user.id,
+        name: `${user.firstName} ${user.lastName || ""}`.trim(),
         email: user.email,
         role: role.name,
-        token: generateToken(user._id),
+        token: generateToken(user.id),
       },
     });
   } catch (error) {
-    console.error("Registration error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("❌ Registration error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 
@@ -53,36 +74,55 @@ exports.login = async (req, res) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Email and password are required" });
-    }
-
-    const user = await User.findOne({ email }).populate("role");
-
-    if (user && (await user.matchPassword(password))) {
-      res.status(200).json({
-        success: true,
-        message: "Login successful",
-        data: {
-          token: generateToken(user._id),
-          user: {
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            department: user.department,
-            position: user.position,
-          },
-        },
+      return res.status(400).json({
+        success: false,
+        message: "Email and password are required",
       });
-    } else {
-      res
-        .status(404)
-        .json({ success: false, message: "Invalid email or password" });
     }
+
+    // Fetch user with role
+    const user = await User.findOne({
+      where: { email },
+      include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    // Check password
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return res.status(404).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    // Successful login
+    res.status(200).json({
+      success: true,
+      message: "Login successful",
+      data: {
+        token: generateToken(user.id),
+        user: {
+          id: user.id,
+          name: `${user.firstName} ${user.lastName || ""}`.trim(),
+          email: user.email,
+          role: user.role ? user.role.name : null,
+          department: user.department,
+          position: user.position,
+        },
+      },
+    });
   } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    console.error("❌ Login error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
