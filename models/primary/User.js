@@ -1,9 +1,9 @@
 const { DataTypes } = require("sequelize");
-const { sequelize } = require("../config/db");
+const { sequelizePrimary } = require("../../config/db");
 const bcrypt = require("bcryptjs");
 const Role = require("./Role"); // Import Role model for association
 
-const User = sequelize.define("User", {
+const User = sequelizePrimary.define("User", {
   id: {
     type: DataTypes.INTEGER,
     autoIncrement: true,

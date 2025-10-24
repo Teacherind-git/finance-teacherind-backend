@@ -1,11 +1,18 @@
-const User = require("../models/User");
-const Role = require("../models/Role");
+const User = require("../models/primary/User");
+const Role = require("../models/primary/Role");
 
 // ✅ Get all users
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.findAll({
-      include: [{ model: Role, as: "role", attributes: ["name"] }],
+      attributes: { exclude: ["password"] }, // 🔒 exclude password
+      include: [
+        {
+          model: Role,
+          as: "role",
+          attributes: ["name"], // only include role name
+        },
+      ],
       order: [["id", "ASC"]],
     });
 
@@ -40,7 +47,9 @@ exports.createUser = async (req, res) => {
     // Check if user already exists
     const existing = await User.findOne({ where: { email } });
     if (existing)
-      return res.status(400).json({ success: false, message: "Email already exists" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Email already exists" });
 
     // Create new user
     const user = await User.create({
@@ -80,13 +89,17 @@ exports.updateUser = async (req, res) => {
 
     const user = await User.findByPk(req.params.id);
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     // Update role if provided
     if (roleName) {
       const role = await Role.findOne({ where: { name: roleName } });
       if (!role)
-        return res.status(400).json({ success: false, message: "Invalid role" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid role" });
       user.roleId = role.id;
     }
 
@@ -118,11 +131,15 @@ exports.deleteUser = async (req, res) => {
   try {
     const user = await User.findByPk(req.params.id);
     if (!user)
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
 
     await user.destroy();
 
-    res.status(200).json({ success: true, message: "User deleted successfully" });
+    res
+      .status(200)
+      .json({ success: true, message: "User deleted successfully" });
   } catch (error) {
     console.error("❌ Error deleting user:", error.message);
     res.status(500).json({ success: false, message: "Server error" });

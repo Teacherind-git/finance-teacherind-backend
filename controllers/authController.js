@@ -1,5 +1,5 @@
-const User = require("../models/User");
-const Role = require("../models/Role");
+const User = require("../models/primary/User");
+const Role = require("../models/primary/Role");
 const jwt = require("jsonwebtoken");
 
 const generateToken = (id) => {
@@ -123,6 +123,28 @@ exports.login = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error",
+    });
+  }
+};
+
+
+// Get all roles
+exports.getAllRoles = async (req, res) => {
+  try {
+    const roles = await Role.findAll({
+      order: [["id", "ASC"]], // optional: sorts by ID ascending
+    });
+
+    res.status(200).json({
+      success: true,
+      count: roles.length,
+      data: roles,
+    });
+  } catch (error) {
+    console.error("Error fetching roles:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch roles",
     });
   }
 };
