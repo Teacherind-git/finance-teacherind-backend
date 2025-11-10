@@ -1,5 +1,5 @@
 const { sequelizePrimary } = require("../../config/db");
-const FeeStructure = require("../../models/primary/FeeStructure");
+const FeeStructure = require("../../models/primary/Package");
 
 (async () => {
   try {
@@ -8,7 +8,7 @@ const FeeStructure = require("../../models/primary/FeeStructure");
 
     // Create table if it doesn't exist
     await FeeStructure.sync({ alter: true });
-    console.log("✅ FeeStructure table created or updated successfully.");
+    console.log("✅ table created or updated successfully.");
 
     process.exit(0);
   } catch (error) {

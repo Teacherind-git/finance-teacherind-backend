@@ -1,12 +1,12 @@
 const { DataTypes } = require("sequelize");
-const { sequelizePrimary } = require("../config/db");
+const { sequelizePrimary } = require("../../config/db");
 
 const Package = sequelizePrimary.define(
   "Package",
   {
     id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
       primaryKey: true,
     },
     name: {
@@ -14,14 +14,14 @@ const Package = sequelizePrimary.define(
       allowNull: false,
     },
     price: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: false,
-    },
-    durationMonths: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.FLOAT,
       allowNull: false,
     },
     classesPerMonth: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    durationMonths: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
@@ -29,9 +29,19 @@ const Package = sequelizePrimary.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
-    isPopular: {
+    tag: {
+      type: DataTypes.STRING,
+      allowNull: true, // example: "Popular", "Best Value"
+    },
+    isHighlight: {
       type: DataTypes.BOOLEAN,
+      allowNull: false,
       defaultValue: false,
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
     },
   },
   {

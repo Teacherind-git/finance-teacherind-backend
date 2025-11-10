@@ -18,11 +18,7 @@ exports.getAllUsers = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: {
-        classes,
-        subjects,
-        syllabus,
-      },
+      users,
     });
   } catch (error) {
     console.error("❌ Error fetching users:", error.message);

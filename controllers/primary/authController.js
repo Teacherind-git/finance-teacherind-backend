@@ -9,10 +9,25 @@ const generateToken = (id) => {
 // ✅ Register new user
 exports.register = async (req, res) => {
   try {
-    const { firstName, lastName, email, password, roleName, department, position } = req.body;
+    const {
+      firstName,
+      lastName,
+      email,
+      password,
+      roleName,
+      department,
+      position,
+    } = req.body;
 
     // Validate input
-    if (!firstName || !email || !password || !roleName || !department || !position) {
+    if (
+      !firstName ||
+      !email ||
+      !password ||
+      !roleName ||
+      !department ||
+      !position
+    ) {
       return res.status(400).json({
         success: false,
         message: "All fields are required",
@@ -127,7 +142,6 @@ exports.login = async (req, res) => {
   }
 };
 
-
 // Get all roles
 exports.getAllRoles = async (req, res) => {
   try {
@@ -138,7 +152,7 @@ exports.getAllRoles = async (req, res) => {
     res.status(200).json({
       success: true,
       count: roles.length,
-      data: roles,
+      roles,
     });
   } catch (error) {
     console.error("Error fetching roles:", error);

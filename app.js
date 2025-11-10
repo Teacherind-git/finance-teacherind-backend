@@ -8,6 +8,7 @@ const authRoutes = require("./routes/primary/authRoutes");
 const userRoutes = require("./routes/primary/userRoutes");
 const classRoutes = require("./routes/primary/classRoutes");
 const feeRoutes = require("./routes/primary/feeRoutes");
+const packageRoutes = require("./routes/primary/packageRoutes");
 
 dotenv.config();
 connectDBs();
@@ -28,6 +29,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/class", classRoutes);
 app.use("/api/fee-structure", feeRoutes);
+app.use("/api/packages", packageRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
