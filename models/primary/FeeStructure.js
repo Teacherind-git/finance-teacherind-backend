@@ -1,5 +1,5 @@
 const { DataTypes } = require("sequelize");
-const { sequelizePrimary } = require("../config/db");
+const { sequelizePrimary } = require("../../config/db");
 
 const FeeStructure = sequelizePrimary.define(
   "FeeStructure",
@@ -10,7 +10,7 @@ const FeeStructure = sequelizePrimary.define(
       primaryKey: true,
     },
     classRange: {
-      type: DataTypes.STRING,
+      type: DataTypes.JSON,
       allowNull: false,
     },
     subject: {
