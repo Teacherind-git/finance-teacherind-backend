@@ -4,17 +4,17 @@ const bcrypt = require("bcryptjs");
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
-const { sequelize } = require("../../config/db");
-const User = require("../../models/User");
-const Role = require("../../models/Role");
+const { sequelizePrimary } = require("../../config/db");
+const User = require("../../models/primary/User");
+const Role = require("../../models/primary/Role");
 
 const createSuperAdmin = async () => {
   try {
-    await sequelize.authenticate();
+    await sequelizePrimary.authenticate();
     console.log("✅ Connected to MySQL");
 
     // Ensure tables exist
-    await sequelize.sync();
+    await sequelizePrimary.sync();
 
     // Check or create SuperAdmin role
     let superAdminRole = await Role.findOne({ where: { name: "SuperAdmin" } });
@@ -33,7 +33,7 @@ const createSuperAdmin = async () => {
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       console.log("🟡 SuperAdmin user already exists");
-      await sequelize.close();
+      await sequelizePrimary.close();
       process.exit(0);
     }
 
@@ -57,12 +57,12 @@ const createSuperAdmin = async () => {
     console.log(`   Password: ${password}`);
     console.log("   Role: SuperAdmin");
 
-    await sequelize.close();
+    await sequelizePrimary.close();
     console.log("🔒 MySQL connection closed");
     process.exit(0);
   } catch (err) {
     console.error("❌ Error creating SuperAdmin:", err.message);
-    await sequelize.close();
+    await sequelizePrimary.close();
     process.exit(1);
   }
 };

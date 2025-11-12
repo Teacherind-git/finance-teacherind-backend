@@ -121,16 +121,14 @@ exports.login = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Login successful",
-      data: {
-        token: generateToken(user.id),
-        user: {
-          id: user.id,
-          name: `${user.firstName} ${user.lastName || ""}`.trim(),
-          email: user.email,
-          role: user.role ? user.role.name : null,
-          department: user.department,
-          position: user.position,
-        },
+      token: generateToken(user.id),
+      user: {
+        id: user.id,
+        name: `${user.firstName} ${user.lastName || ""}`.trim(),
+        email: user.email,
+        role: user.role ? user.role.name : null,
+        department: user.department,
+        position: user.position,
       },
     });
   } catch (error) {

@@ -45,11 +45,9 @@ exports.getAllData = async (req, res) => {
     ]);
     res.status(200).json({
       success: true,
-      data: {
-        classes,
-        subjects,
-        syllabus,
-      },
+      classes,
+      subjects,
+      syllabus,
     });
   } catch (error) {
     console.error("Error fetching all data:", error);

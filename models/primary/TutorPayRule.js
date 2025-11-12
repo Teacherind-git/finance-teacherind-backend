@@ -1,6 +1,5 @@
 const { DataTypes } = require("sequelize");
-const { sequelizePrimary } = require("../config/db");
-const TutorIncrement = require("./TutorIncrement");
+const { sequelizePrimary } = require("../../config/db");
 
 const TutorPayRule = sequelizePrimary.define(
   "TutorPayRule",
@@ -29,14 +28,14 @@ const TutorPayRule = sequelizePrimary.define(
   }
 );
 
-// Relation: One TutorPayRule has many increments
-TutorPayRule.hasMany(TutorIncrement, {
-  foreignKey: "tutorRuleId",
-  as: "increments",
-});
-TutorIncrement.belongsTo(TutorPayRule, {
-  foreignKey: "tutorRuleId",
-  as: "tutorRule",
-});
+// // Relation: One TutorPayRule has many increments
+// TutorPayRule.hasMany(TutorIncrement, {
+//   foreignKey: "tutorRuleId",
+//   as: "increments",
+// });
+// TutorIncrement.belongsTo(TutorPayRule, {
+//   foreignKey: "tutorRuleId",
+//   as: "tutorRule",
+// });
 
 module.exports = TutorPayRule;

@@ -1,11 +1,12 @@
 const express = require("express");
 const router = express.Router();
-const { protect, authorizeRoles } = require('../../middlewares/authMiddleware');
+const { protect, authorizeRoles } = require("../../middlewares/authMiddleware");
 const {
   getAllFeeStructures,
   createFeeStructure,
   updateFeeStructure,
   deleteFeeStructure,
+  getFeeManagementSummary,
 } = require("../../controllers/primary/feeStructureController");
 
 router.use(protect);
@@ -16,6 +17,11 @@ router.delete(
   "/:id",
   authorizeRoles("SuperAdmin", "Admin"),
   deleteFeeStructure
+);
+router.get(
+  "/summary",
+  authorizeRoles("SuperAdmin", "Admin"),
+  getFeeManagementSummary
 );
 
 module.exports = router;
