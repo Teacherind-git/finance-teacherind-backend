@@ -1,8 +1,8 @@
 // Load env variables first
 require("dotenv").config();
 
-const { sequelize } = require("../../config/db"); // Your Sequelize instance
-const Role = require("../../models/Role");
+const { sequelizePrimary } = require("../../config/db");
+const Role = require("../../models/primary/Role");
 
 const roles = [
   { name: "SuperAdmin", permissions: ["*"] },
@@ -14,11 +14,11 @@ const roles = [
 const seedRoles = async () => {
   try {
     
-    await sequelize.authenticate();
+    await sequelizePrimary.authenticate();
     console.log("✅ Connected to MySQL");
 
     // Ensure tables exist
-    await sequelize.sync();
+    await sequelizePrimary.sync();
 
     for (const roleData of roles) {
       const existingRole = await Role.findOne({ where: { name: roleData.name } });
@@ -31,11 +31,11 @@ const seedRoles = async () => {
     }
 
     console.log("✅ Role seeding completed!");
-    await sequelize.close();
+    await sequelizePrimary.close();
     process.exit(0);
   } catch (err) {
     console.error("❌ Error seeding roles:", err.message);
-    await sequelize.close();
+    await sequelizePrimary.close();
     process.exit(1);
   }
 };

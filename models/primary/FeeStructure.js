@@ -17,10 +17,6 @@ const FeeStructure = sequelizePrimary.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
-    syllabus: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
     feePerHour: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,

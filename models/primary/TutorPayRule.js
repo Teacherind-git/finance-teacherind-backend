@@ -1,41 +1,19 @@
+// models/PayRule.js
 const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
 
-const TutorPayRule = sequelizePrimary.define(
-  "TutorPayRule",
+const PayRule = sequelizePrimary.define(
+  "PayRule",
   {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    basePercentage: {
-      type: DataTypes.DECIMAL(5, 2),
-      allowNull: false,
-    },
-    ratingBonus: {
-      type: DataTypes.DECIMAL(5, 2),
-      allowNull: false,
-    },
-    createdBy: {
-      type: DataTypes.STRING,
+    rules_json: {
+      type: DataTypes.JSON,
       allowNull: false,
     },
   },
   {
-    tableName: "tutor_pay_rules",
+    tableName: "pay_rules",
     timestamps: true,
   }
 );
 
-// // Relation: One TutorPayRule has many increments
-// TutorPayRule.hasMany(TutorIncrement, {
-//   foreignKey: "tutorRuleId",
-//   as: "increments",
-// });
-// TutorIncrement.belongsTo(TutorPayRule, {
-//   foreignKey: "tutorRuleId",
-//   as: "tutorRule",
-// });
-
-module.exports = TutorPayRule;
+module.exports = PayRule;

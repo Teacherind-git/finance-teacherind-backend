@@ -1,25 +1,19 @@
 const FeeStructure = require("../../models/primary/FeeStructure");
 const Subject = require("../../models/primary/Subject");
-const Syllabus = require("../../models/primary/Syllabus");
 const User = require("../../models/primary/User");
 const Package = require("../../models/primary/Package");
-const TutorPay = require("../../models/primary/TutorPayRule");
 
 const { Op } = require("sequelize");
 
 exports.getAllFeeStructures = async (req, res) => {
   try {
-    const { subject, syllabus, addedBy, search } = req.query; // <-- filters from frontend
+    const { subject, addedBy, search } = req.query; // <-- filters from frontend
 
     // Build a dynamic filter (Sequelize "where" object)
     const whereClause = {};
 
     if (subject) {
       whereClause.subject = subject;
-    }
-
-    if (syllabus) {
-      whereClause.syllabus = syllabus;
     }
 
     if (addedBy) {
@@ -38,9 +32,8 @@ exports.getAllFeeStructures = async (req, res) => {
     });
 
     // Fetch subjects, syllabuses, and users
-    const [subjects, syllabuses, users] = await Promise.all([
+    const [subjects, users] = await Promise.all([
       Subject.findAll({ attributes: ["id", "name"] }),
-      Syllabus.findAll({ attributes: ["id", "name"] }),
       User.findAll({ attributes: ["id", "firstName", "lastName"] }),
     ]);
 
@@ -50,10 +43,6 @@ exports.getAllFeeStructures = async (req, res) => {
       return acc;
     }, {});
 
-    const syllabusMap = syllabuses.reduce((acc, s) => {
-      acc[s.id] = s.name;
-      return acc;
-    }, {});
 
     const userMap = users.reduce((acc, u) => {
       acc[u.id] = `${u.firstName}${u.lastName ? " " + u.lastName : ""}`;
@@ -64,7 +53,6 @@ exports.getAllFeeStructures = async (req, res) => {
     const enrichedData = data.map((item) => ({
       ...item.toJSON(),
       subjectDisplay: subjectMap[item.subject] || "Unknown Subject",
-      syllabusDisplay: syllabusMap[item.syllabus] || "Unknown Syllabus",
       addedByDisplay: userMap[item.addedBy] || "Unknown User",
     }));
 
