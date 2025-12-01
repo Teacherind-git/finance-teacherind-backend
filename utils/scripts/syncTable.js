@@ -1,5 +1,6 @@
 const { sequelizePrimary } = require("../../config/db");
-const FeeStructure = require("../../models/primary/Package");
+const FeeStructure = require("../../models/primary/FeeStructure");
+
 
 (async () => {
   try {

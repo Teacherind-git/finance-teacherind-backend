@@ -3,96 +3,117 @@ const { sequelizePrimary } = require("../../config/db");
 const bcrypt = require("bcryptjs");
 const Role = require("./Role"); // Import Role model for association
 
-const User = sequelizePrimary.define("User", {
-  id: {
-    type: DataTypes.INTEGER,
-    autoIncrement: true,
-    primaryKey: true,
-  },
+const User = sequelizePrimary.define(
+  "User",
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      autoIncrement: true,
+      primaryKey: true,
+    },
 
-  firstName: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
+    firstName: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
 
-  lastName: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
+    lastName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
 
-  email: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-    validate: { isEmail: true },
-  },
+    email: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+      validate: { isEmail: true },
+    },
 
-  password: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
+    password: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
 
-  roleId: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: "roles",
-      key: "id",
+    roleId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: "roles",
+        key: "id",
+      },
+    },
+
+    department: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "",
+    },
+
+    position: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "",
+    },
+
+    phone: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    taxId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    address: {
+      type: DataTypes.JSON, // store as JSON { street, city, state, country, postalCode }
+      allowNull: true,
+      defaultValue: {},
+    },
+
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    createdBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "users",
+        key: "id",
+      },
+    },
+
+    updatedBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "users",
+        key: "id",
+      },
     },
   },
-
-  department: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    defaultValue: "",
-  },
-
-  position: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    defaultValue: "",
-  },
-
-  phone: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-
-  taxId: {
-    type: DataTypes.STRING,
-    allowNull: true,
-  },
-
-  address: {
-    type: DataTypes.JSON, // store as JSON { street, city, state, country, postalCode }
-    allowNull: true,
-    defaultValue: {},
-  },
-
-  isActive: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: true,
-  },
-}, {
-  tableName: "users",
-  timestamps: true,
-  hooks: {
-    // ✅ Automatically hash password before saving
-    beforeCreate: async (user) => {
-      if (user.password) {
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(user.password, salt);
-      }
+  {
+    tableName: "users",
+    timestamps: true,
+    hooks: {
+      // ✅ Automatically hash password before saving
+      beforeCreate: async (user) => {
+        if (user.password) {
+          const salt = await bcrypt.genSalt(10);
+          user.password = await bcrypt.hash(user.password, salt);
+        }
+      },
+      beforeUpdate: async (user) => {
+        if (user.changed("password")) {
+          const salt = await bcrypt.genSalt(10);
+          user.password = await bcrypt.hash(user.password, salt);
+        }
+      },
     },
-    beforeUpdate: async (user) => {
-      if (user.changed("password")) {
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(user.password, salt);
-      }
-    },
-  },
-});
+  }
+);
 
 // ✅ Instance method: compare password
 User.prototype.matchPassword = async function (enteredPassword) {

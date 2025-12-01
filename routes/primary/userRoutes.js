@@ -4,8 +4,8 @@ const { protect, authorizeRoles } = require('../../middlewares/authMiddleware');
 const { getAllUsers, createUser, updateUser, deleteUser } = require('../../controllers/primary/userController');
 
 router.use(protect);
-router.get('/', authorizeRoles('SuperAdmin', 'Admin'), getAllUsers);
-router.post('/', authorizeRoles('SuperAdmin'), createUser);
+router.get('/', authorizeRoles('SuperAdmin', 'Admin', 'User'), getAllUsers);
+router.post('/', authorizeRoles('SuperAdmin','User'), createUser);
 router.put('/:id', authorizeRoles('SuperAdmin'), updateUser);
 router.delete('/:id', authorizeRoles('SuperAdmin'), deleteUser);
 

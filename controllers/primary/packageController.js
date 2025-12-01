@@ -28,7 +28,12 @@ exports.getById = async (req, res) => {
 // ✅ Create a new package
 exports.create = async (req, res) => {
   try {
-    const pkg = await Package.create(req.body);
+    const pkg = await Package.create({
+      ...req.body,
+      createdBy: req.user.id ?? 10, // fallback to superadmin 10 if needed
+      updatedBy: req.user.id ?? 10,
+    });
+
     res.status(201).json(pkg);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -41,7 +46,11 @@ exports.update = async (req, res) => {
     const pkg = await Package.findByPk(req.params.id);
     if (!pkg) return res.status(404).json({ message: "Package not found" });
 
-    await pkg.update(req.body);
+    await pkg.update({
+      ...req.body,
+      updatedBy: req.user.id ?? 10, // set updatedBy every edit
+    });
+
     res.json(pkg);
   } catch (error) {
     res.status(400).json({ message: error.message });

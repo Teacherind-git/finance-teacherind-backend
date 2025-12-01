@@ -43,7 +43,6 @@ exports.getAllFeeStructures = async (req, res) => {
       return acc;
     }, {});
 
-
     const userMap = users.reduce((acc, u) => {
       acc[u.id] = `${u.firstName}${u.lastName ? " " + u.lastName : ""}`;
       return acc;
@@ -66,19 +65,19 @@ exports.getAllFeeStructures = async (req, res) => {
 // ✅ Create
 exports.createFeeStructure = async (req, res) => {
   try {
-    // Extract user info from token
-    const addedBy = req.user?.id;
+    const userId = req.user?.id;
 
-    if (!addedBy) {
+    if (!userId) {
       return res
         .status(400)
         .json({ message: "Unauthorized: Missing user info" });
     }
 
-    // Include addedBy in the record
     const payload = {
       ...req.body,
-      addedBy,
+      addedBy: userId,
+      createdBy: userId,
+      updatedBy: userId, // optional but recommended
     };
 
     const newRecord = await FeeStructure.create(payload);
@@ -93,7 +92,25 @@ exports.createFeeStructure = async (req, res) => {
 exports.updateFeeStructure = async (req, res) => {
   try {
     const { id } = req.params;
-    await FeeStructure.update(req.body, { where: { id } });
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ message: "Unauthorized: Missing user info" });
+    }
+
+    const payload = {
+      ...req.body,
+      updatedBy: userId, // 👈 always set updatedBy
+    };
+
+    const [updated] = await FeeStructure.update(payload, { where: { id } });
+
+    if (!updated) {
+      return res.status(404).json({ message: "Record not found" });
+    }
+
     res.json({ message: "Updated successfully" });
   } catch (err) {
     console.error("Update error:", err);

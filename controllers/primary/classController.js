@@ -39,10 +39,11 @@ exports.getAllSyllabus = async (req, res) => {
 exports.getAllData = async (req, res) => {
   try {
     const [classes, subjects, syllabus] = await Promise.all([
-      Class.findAll(),
-      Subject.findAll(),
-      Syllabus.findAll(),
+      Class.findAll({ order: [["number", "ASC"]] }),
+      Subject.findAll({ order: [["name", "ASC"]] }),
+      Syllabus.findAll({ order: [["name", "ASC"]] }),
     ]);
+
     res.status(200).json({
       success: true,
       classes,
@@ -54,3 +55,4 @@ exports.getAllData = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+

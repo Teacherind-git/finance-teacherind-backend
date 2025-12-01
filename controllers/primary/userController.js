@@ -4,13 +4,37 @@ const Role = require("../../models/primary/Role");
 // ✅ Get all users
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.findAll({
-      attributes: { exclude: ["password"] }, // 🔒 exclude password
+    let users;
+
+    // If logged-in person is a normal user → only return data they created
+    if (req.user.role.name === "User") {
+      users = await User.findAll({
+        where: { createdBy: req.user.id }, // 👈 ONLY fetch users created by him
+        attributes: { exclude: ["password"] },
+        include: [
+          {
+            model: Role,
+            as: "role",
+            attributes: ["name"],
+          },
+        ],
+        order: [["id", "ASC"]],
+      });
+
+      return res.status(200).json({
+        success: true,
+        users,
+      });
+    }
+
+    // SuperAdmin or Admin → return ALL users
+    users = await User.findAll({
+      attributes: { exclude: ["password"] },
       include: [
         {
           model: Role,
           as: "role",
-          attributes: ["name"], // only include role name
+          attributes: ["name"],
         },
       ],
       order: [["id", "ASC"]],
@@ -39,22 +63,22 @@ exports.createUser = async (req, res) => {
       position,
       phone,
       taxId,
-      address, // { country, state, postalCode, ... }
+      address,
     } = req.body;
 
-    // Check role
+    // Validate role
     const role = await Role.findOne({ where: { name: roleName } });
     if (!role)
       return res.status(400).json({ success: false, message: "Invalid role" });
 
-    // Check if user already exists
+    // Check if email already exists
     const existing = await User.findOne({ where: { email } });
     if (existing)
       return res
         .status(400)
         .json({ success: false, message: "Email already exists" });
 
-    // Create new user
+    // Create user with createdBy & updatedBy
     const user = await User.create({
       firstName,
       lastName,
@@ -66,6 +90,8 @@ exports.createUser = async (req, res) => {
       phone: phone || "",
       taxId: taxId || "",
       address: address || {},
+      createdBy: req.user.id, // 👈 who created
+      updatedBy: req.user.id, // 👈 who updated initially
     });
 
     res.status(201).json({ success: true, data: user });
@@ -106,19 +132,22 @@ exports.updateUser = async (req, res) => {
       user.roleId = role.id;
     }
 
-    // Update fields
-    user.firstName = firstName || user.firstName;
-    user.lastName = lastName || user.lastName;
-    user.email = email || user.email;
-    user.department = department || user.department;
-    user.position = position || user.position;
-    user.phone = phone || user.phone;
-    user.taxId = taxId || user.taxId;
+    // Update normal fields
+    user.firstName = firstName ?? user.firstName;
+    user.lastName = lastName ?? user.lastName;
+    user.email = email ?? user.email;
+    user.department = department ?? user.department;
+    user.position = position ?? user.position;
+    user.phone = phone ?? user.phone;
+    user.taxId = taxId ?? user.taxId;
 
+    // Update address (merged)
     if (address) {
-      // Merge new address fields with existing ones
       user.address = { ...user.address, ...address };
     }
+
+    // 👈 Track who updated the user
+    user.updatedBy = req.user.id;
 
     await user.save();
 
