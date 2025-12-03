@@ -10,6 +10,7 @@ const classRoutes = require("./routes/primary/classRoutes");
 const feeRoutes = require("./routes/primary/feeRoutes");
 const packageRoutes = require("./routes/primary/packageRoutes");
 const tutorPayRuleRoutes = require("./routes/primary/tutorPayRule");
+const studentRoutes = require("./routes/primary/studentRoutes");
 
 dotenv.config();
 connectDBs();
@@ -32,6 +33,7 @@ app.use("/api/class", classRoutes);
 app.use("/api/fee-structure", feeRoutes);
 app.use("/api/packages", packageRoutes);
 app.use("/api/tutor-pay", tutorPayRuleRoutes);
+app.use("/api/students", studentRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));

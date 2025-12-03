@@ -1,3 +1,4 @@
+const { sequelizePrimary } = require("../../config/db");
 const Class = require("../../models/primary/Class");
 const Subject = require("../../models/primary/Subject");
 const Syllabus = require("../../models/primary/Syllabus");
@@ -39,16 +40,37 @@ exports.getAllSyllabus = async (req, res) => {
 exports.getAllData = async (req, res) => {
   try {
     const [classes, subjects, syllabus] = await Promise.all([
-      Class.findAll({ order: [["number", "ASC"]] }),
-      Subject.findAll({ order: [["name", "ASC"]] }),
-      Syllabus.findAll({ order: [["name", "ASC"]] }),
+      // ⭐ Force sorting as NUMBER even if DB stores as STRING
+      Class.findAll({
+        order: [[sequelizePrimary.literal("CAST(number AS UNSIGNED)"), "ASC"]],
+      }),
+
+      Subject.findAll({
+        order: [["name", "ASC"]],
+      }),
+
+      Syllabus.findAll({
+        order: [["name", "ASC"]],
+      }),
     ]);
+
+    // ⭐ Clean unwanted syllabus & subject text formatting
+    const cleanedSubjects = subjects.map((item) => ({
+      ...item.toJSON(),
+      name: removeQuotes(item.name),
+      content: removeQuotes(item.content),
+    }));
+    const cleanedSyllabus = syllabus.map((item) => ({
+      ...item.toJSON(),
+      name: removeQuotes(item.name),
+      content: removeQuotes(item.content),
+    }));
 
     res.status(200).json({
       success: true,
       classes,
-      subjects,
-      syllabus,
+      subjects: cleanedSubjects,
+      syllabus: cleanedSyllabus,
     });
   } catch (error) {
     console.error("Error fetching all data:", error);
@@ -56,3 +78,13 @@ exports.getAllData = async (req, res) => {
   }
 };
 
+// 🧽 Remove ALL quotes from string
+function removeQuotes(str) {
+  if (!str) return str;
+
+  return String(str)
+    .replace(/["']/g, "") // remove all " and '
+    .replace(/\\"/g, "") // remove escaped quotes
+    .replace(/\\'/g, "") // remove escaped single quotes
+    .trim();
+}

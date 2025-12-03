@@ -9,56 +9,34 @@ const Package = sequelizePrimary.define(
       autoIncrement: true,
       primaryKey: true,
     },
-    name: {
-      type: DataTypes.STRING,
-      allowNull: false,
-    },
-    price: {
-      type: DataTypes.FLOAT,
-      allowNull: false,
-    },
-    classesPerMonth: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-    },
-    durationMonths: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-    },
-    description: {
-      type: DataTypes.STRING,
-      allowNull: true,
-    },
-    tag: {
-      type: DataTypes.STRING,
-      allowNull: true, // example: "Popular", "Best Value"
-    },
-    isHighlight: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: false,
-    },
-    isActive: {
-      type: DataTypes.BOOLEAN,
-      allowNull: false,
-      defaultValue: true,
-    },
+
+    name: { type: DataTypes.STRING, allowNull: false },
+    price: { type: DataTypes.FLOAT, allowNull: false },
+    classesPerMonth: { type: DataTypes.INTEGER, allowNull: false },
+    multiplier: { type: DataTypes.FLOAT, allowNull: true },
+
+    description: { type: DataTypes.STRING, allowNull: true },
+    tag: { type: DataTypes.STRING, allowNull: true },
+
+    // ⭐ NEW FIELDS
+    growthSession: { type: DataTypes.INTEGER, allowNull: true },
+    questionToolExam: { type: DataTypes.INTEGER, allowNull: true },
+    extraExamPrice: { type: DataTypes.FLOAT, allowNull: true },
+    headerColor: { type: DataTypes.STRING, allowNull: true },
+
+    isHighlight: { type: DataTypes.BOOLEAN, defaultValue: false },
+    isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
+
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
+      references: { model: "users", key: "id" },
     },
 
     updatedBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
+      references: { model: "users", key: "id" },
     },
   },
   {

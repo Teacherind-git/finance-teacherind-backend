@@ -27,6 +27,8 @@ exports.getById = async (req, res) => {
 
 // ✅ Create a new package
 exports.create = async (req, res) => {
+  console.log('9999', req.body);
+  
   try {
     const pkg = await Package.create({
       ...req.body,
