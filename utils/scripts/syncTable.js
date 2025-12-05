@@ -1,7 +1,6 @@
 const { sequelizePrimary } = require("../../config/db");
 const FeeStructure = require("../../models/primary/StudentDetail");
 
-
 (async () => {
   try {
     await sequelizePrimary.authenticate();

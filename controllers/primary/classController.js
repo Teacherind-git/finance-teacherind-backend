@@ -2,6 +2,7 @@ const { sequelizePrimary } = require("../../config/db");
 const Class = require("../../models/primary/Class");
 const Subject = require("../../models/primary/Subject");
 const Syllabus = require("../../models/primary/Syllabus");
+const ClassRange = require("../../models/primary/ClassRange");
 
 // Get all classes
 exports.getAllClasses = async (req, res) => {
@@ -39,31 +40,49 @@ exports.getAllSyllabus = async (req, res) => {
 // ✅ Optional combined API
 exports.getAllData = async (req, res) => {
   try {
-    const [classes, subjects, syllabus] = await Promise.all([
-      // ⭐ Force sorting as NUMBER even if DB stores as STRING
+    const [classes, subjects, syllabus, classRanges] = await Promise.all([
+      // ⭐ Sort classes by number (numeric sort)
       Class.findAll({
         order: [[sequelizePrimary.literal("CAST(number AS UNSIGNED)"), "ASC"]],
       }),
 
+      // ⭐ Sort subjects
       Subject.findAll({
         order: [["name", "ASC"]],
       }),
 
+      // ⭐ Sort syllabus
       Syllabus.findAll({
         order: [["name", "ASC"]],
       }),
+
+      // ⭐ NEW → Fetch class ranges sorted logically
+      ClassRange.findAll({
+        order: [
+          [sequelizePrimary.literal("CAST(fromClass AS UNSIGNED)"), "ASC"],
+        ],
+      }),
     ]);
 
-    // ⭐ Clean unwanted syllabus & subject text formatting
+    // ⭐ Clean unwanted fields (if any)
     const cleanedSubjects = subjects.map((item) => ({
       ...item.toJSON(),
-      name: removeQuotes(item.name),
-      content: removeQuotes(item.content),
+      name: item.name,
+      content: item.content,
     }));
+
     const cleanedSyllabus = syllabus.map((item) => ({
       ...item.toJSON(),
-      name: removeQuotes(item.name),
-      content: removeQuotes(item.content),
+      name: item.name,
+      content: item.content,
+    }));
+
+    // ⭐ Format class ranges to match UI needs
+    const formattedRanges = classRanges.map((r) => ({
+      id: r.id,
+      label: r.label, // Example: "Class 1–4"
+      fromClass: r.fromClass,
+      toClass: r.toClass,
     }));
 
     res.status(200).json({
@@ -71,20 +90,10 @@ exports.getAllData = async (req, res) => {
       classes,
       subjects: cleanedSubjects,
       syllabus: cleanedSyllabus,
+      classRanges: formattedRanges, // ⭐ add here
     });
   } catch (error) {
     console.error("Error fetching all data:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
-// 🧽 Remove ALL quotes from string
-function removeQuotes(str) {
-  if (!str) return str;
-
-  return String(str)
-    .replace(/["']/g, "") // remove all " and '
-    .replace(/\\"/g, "") // remove escaped quotes
-    .replace(/\\'/g, "") // remove escaped single quotes
-    .trim();
-}

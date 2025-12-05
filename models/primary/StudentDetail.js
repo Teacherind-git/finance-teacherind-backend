@@ -1,6 +1,9 @@
 const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
 const Student = require("./Student");
+const ClassRange = require("./ClassRange");
+const Subject = require("./Subject");
+const Package = require("./Package");
 
 const StudentDetail = sequelizePrimary.define(
   "student_detail",
@@ -46,7 +49,12 @@ const StudentDetail = sequelizePrimary.define(
 );
 
 // Relations
-Student.hasMany(StudentDetail, { foreignKey: "studentId", as: "details" });
-StudentDetail.belongsTo(Student, { foreignKey: "studentId", as: "student" });
+Student.hasMany(StudentDetail, { as: "details", foreignKey: "studentId" });
+StudentDetail.belongsTo(Student, { foreignKey: "studentId" });
+
+StudentDetail.belongsTo(ClassRange, { as: "class_range", foreignKey: "classId" });
+StudentDetail.belongsTo(Subject, { as: "subject", foreignKey: "subjectId" });
+StudentDetail.belongsTo(Package, { as: "package", foreignKey: "packageId" });
+
 
 module.exports = StudentDetail;

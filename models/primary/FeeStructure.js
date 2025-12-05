@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
+const ClassRange = require("../../models/primary/ClassRange"); // <-- import your table
 
 const FeeStructure = sequelizePrimary.define(
   "FeeStructure",
@@ -9,22 +10,35 @@ const FeeStructure = sequelizePrimary.define(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    classRange: {
-      type: DataTypes.JSON,
+
+    classRangeId: {
+      type: DataTypes.INTEGER,
       allowNull: false,
+      references: {
+        model: "class_ranges",   // table name of ClassRange
+        key: "id",
+      },
     },
-    subject: {
-      type: DataTypes.STRING,
+
+    subjectId: {
+      type: DataTypes.INTEGER,
       allowNull: false,
+      references: {
+        model: "subjects",
+        key: "id",
+      },
     },
+
     feePerHour: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
     },
+
     addedBy: {
       type: DataTypes.STRING,
       allowNull: false,
     },
+
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -48,5 +62,11 @@ const FeeStructure = sequelizePrimary.define(
     timestamps: true,
   }
 );
+
+// ⭐ ASSOCIATIONS
+FeeStructure.belongsTo(ClassRange, {
+  foreignKey: "classRangeId",
+  as: "classRange",
+});
 
 module.exports = FeeStructure;

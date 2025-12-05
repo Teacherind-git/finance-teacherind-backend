@@ -2,6 +2,7 @@ const FeeStructure = require("../../models/primary/FeeStructure");
 const Subject = require("../../models/primary/Subject");
 const User = require("../../models/primary/User");
 const Package = require("../../models/primary/Package");
+const ClassRange = require("../../models/primary/ClassRange");
 
 const { Op } = require("sequelize");
 
@@ -13,7 +14,7 @@ exports.getAllFeeStructures = async (req, res) => {
     const whereClause = {};
 
     if (subject) {
-      whereClause.subject = subject;
+      whereClause.subjectId = subject;
     }
 
     if (addedBy) {
@@ -32,9 +33,10 @@ exports.getAllFeeStructures = async (req, res) => {
     });
 
     // Fetch subjects, syllabuses, and users
-    const [subjects, users] = await Promise.all([
+    const [subjects, users, class_ranges] = await Promise.all([
       Subject.findAll({ attributes: ["id", "name"] }),
       User.findAll({ attributes: ["id", "firstName", "lastName"] }),
+      ClassRange.findAll({ attributes: ["id", "label"] }),
     ]);
 
     // Create lookup maps
@@ -48,12 +50,20 @@ exports.getAllFeeStructures = async (req, res) => {
       return acc;
     }, {});
 
+    const classRangeMap = class_ranges.reduce((acc, u) => {
+      acc[u.id] = u.label;
+      return acc;
+    }, {});
+    
+    
     // Enrich FeeStructure data with names
     const enrichedData = data.map((item) => ({
       ...item.toJSON(),
-      subjectDisplay: subjectMap[item.subject] || "Unknown Subject",
+      subjectDisplay: subjectMap[item.subjectId] || "Unknown Subject",
       addedByDisplay: userMap[item.addedBy] || "Unknown User",
+      classDisplay: classRangeMap[item.classRangeId] || "Unknown Class",
     }));
+    
 
     res.json(enrichedData);
   } catch (err) {

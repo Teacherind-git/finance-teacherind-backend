@@ -44,7 +44,7 @@ const sequelize = new Sequelize(
 // ===============================
 // 🚀 Migration Function
 // ===============================
-const excludedCollections = ["users", "questions"];
+const excludedCollections = ["users", "questions", "modules", "sections"];
 
 async function migrateCollection(collectionName) {
   console.log(`\n🚀 Migrating collection: ${collectionName}`);
@@ -55,35 +55,68 @@ async function migrateCollection(collectionName) {
     return;
   }
 
-  // Collect all Firestore documents and dynamic fields
   const docs = [];
-  const allFields = new Set();
+  const allFields = {};
 
   snapshot.forEach((doc) => {
     const data = doc.data();
-    docs.push({ firebase_id: doc.id, ...data });
-    Object.keys(data).forEach((f) => allFields.add(f));
+    const cleanedData = {};
+
+    Object.keys(data).forEach((key) => {
+      let value = data[key];
+
+      // CLEAN STRING FIELDS
+      if (typeof value === "string") {
+        value = value.trim();
+        if (
+          (value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))
+        ) {
+          value = value.substring(1, value.length - 1);
+        }
+      }
+
+      cleanedData[key] = value;
+
+      // Detect data type
+      if (!allFields[key]) {
+        if (typeof value === "string") {
+          allFields[key] = DataTypes.STRING;
+        } else if (typeof value === "number") {
+          allFields[key] = Number.isInteger(value)
+            ? DataTypes.INTEGER
+            : DataTypes.FLOAT;
+        } else if (value instanceof admin.firestore.Timestamp) {
+          allFields[key] = DataTypes.DATE;
+          cleanedData[key] = value.toDate();
+        } else if (Array.isArray(value) || typeof value === "object") {
+          allFields[key] = DataTypes.JSON;
+        } else {
+          allFields[key] = DataTypes.STRING; // fallback
+        }
+      }
+    });
+
+    docs.push({ firebase_id: doc.id, ...cleanedData });
   });
 
-  // Dynamically define Sequelize model
+  // Build sequelize model
   const modelAttributes = {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     firebase_id: { type: DataTypes.STRING, allowNull: false },
   };
 
-  for (const field of allFields) {
-    modelAttributes[field] = { type: DataTypes.JSON };
-  }
+  Object.keys(allFields).forEach((field) => {
+    modelAttributes[field] = { type: allFields[field] };
+  });
 
   const DynamicModel = sequelize.define(collectionName, modelAttributes, {
     tableName: collectionName,
     timestamps: true,
   });
 
-  // Create table if not exists
   await DynamicModel.sync();
 
-  // Insert or update (upsert) documents
   for (const doc of docs) {
     await DynamicModel.upsert(doc);
   }

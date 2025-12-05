@@ -66,7 +66,7 @@ const User = sequelizePrimary.define(
     },
 
     address: {
-      type: DataTypes.JSON, // store as JSON { street, city, state, country, postalCode }
+      type: DataTypes.JSON,
       allowNull: true,
       defaultValue: {},
     },
@@ -76,6 +76,7 @@ const User = sequelizePrimary.define(
       allowNull: false,
       defaultValue: true,
     },
+
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -98,7 +99,6 @@ const User = sequelizePrimary.define(
     tableName: "users",
     timestamps: true,
     hooks: {
-      // ✅ Automatically hash password before saving
       beforeCreate: async (user) => {
         if (user.password) {
           const salt = await bcrypt.genSalt(10);
@@ -115,12 +115,16 @@ const User = sequelizePrimary.define(
   }
 );
 
-// ✅ Instance method: compare password
+// Instance method: compare password
 User.prototype.matchPassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// ✅ Define association with Role
+// Associations
 User.belongsTo(Role, { foreignKey: "roleId", as: "role" });
+
+// Self-reference for creator/updater
+User.belongsTo(User, { foreignKey: "createdBy", as: "creator" });
+User.belongsTo(User, { foreignKey: "updatedBy", as: "updater" });
 
 module.exports = User;

@@ -1,54 +1,72 @@
 const User = require("../../models/primary/User");
 const Role = require("../../models/primary/Role");
+const { Op } = require("sequelize");
 
 // ✅ Get all users
 exports.getAllUsers = async (req, res) => {
   try {
-    let users;
+    const { type } = req.query; // SuperAdmin / Others
 
-    // If logged-in person is a normal user → only return data they created
+    const commonInclude = [
+      {
+        model: User,
+        as: "creator",
+        attributes: ["id", "firstName", "lastName", "email"],
+        required: false,
+      },
+      {
+        model: Role,
+        as: "role",
+        attributes: ["name"],
+      },
+    ];
+
+    let whereCondition = {};
+
+    // -----------------------------------------
+    // 1️⃣ Normal User → only see their created users
+    // -----------------------------------------
     if (req.user.role.name === "User") {
-      users = await User.findAll({
-        where: { createdBy: req.user.id }, // 👈 ONLY fetch users created by him
-        attributes: { exclude: ["password"] },
-        include: [
-          {
-            model: Role,
-            as: "role",
-            attributes: ["name"],
-          },
-        ],
-        order: [["id", "ASC"]],
-      });
-
-      return res.status(200).json({
-        success: true,
-        users,
-      });
+      whereCondition = { createdBy: req.user.id };
     }
 
-    // SuperAdmin or Admin → return ALL users
-    users = await User.findAll({
+    // -----------------------------------------
+    // 2️⃣ SuperAdmin Special Filtering
+    // -----------------------------------------
+    if (req.user.role.name === "SuperAdmin") {
+      if (type === "SuperAdmin") {
+        // Return ONLY users created by logged-in super admin
+        whereCondition = { createdBy: req.user.id };
+      } else if (type === "Others") {
+        // Return users NOT created by logged-in super admin
+        whereCondition = { createdBy: { [Op.ne]: req.user.id } };
+      }
+      // If no query param → return all users (default)
+    }
+
+    const users = await User.findAll({
+      where: whereCondition,
       attributes: { exclude: ["password"] },
-      include: [
-        {
-          model: Role,
-          as: "role",
-          attributes: ["name"],
-        },
-      ],
+      include: commonInclude,
       order: [["id", "ASC"]],
     });
 
-    res.status(200).json({
-      success: true,
-      users,
+    // Add creatorName field
+    const usersWithCreatorName = users.map((u) => {
+      const userJSON = u.toJSON();
+      userJSON.creatorName = u.creator
+        ? `${u.creator.firstName} ${u.creator.lastName}`.trim()
+        : null;
+      return userJSON;
     });
+
+    res.status(200).json({ success: true, users: usersWithCreatorName });
   } catch (error) {
-    console.error("❌ Error fetching users:", error.message);
+    console.error("❌ Error fetching users:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
 
 // ✅ Create user
 exports.createUser = async (req, res) => {

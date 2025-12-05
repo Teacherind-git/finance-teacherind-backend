@@ -1,52 +1,116 @@
-const PayRule = require("../../models/primary/TutorPayRule");
+const PayRuleConfig = require("../../models/primary/TutorPayRule");
 
-exports.savePayRule = async (req, res) => {
-  try {
-    const data = req.body; // full JSON from frontend
+// ---- Helper: Load or create empty config ----
+async function getConfigRow() {
+  let row = await PayRuleConfig.findOne();
 
-    let rule = await PayRule.findOne();
-
-    if (rule) {
-      rule.rules_json = data;
-      await rule.save();
-
-      return res.status(200).json({
-        success: true,
-        message: "Pay rule updated successfully",
-      });
-    }
-
-    await PayRule.create({ rules_json: data });
-
-    return res.status(201).json({
-      success: true,
-      message: "Pay rule created successfully",
-    });
-  } catch (error) {
-    console.error("❌ Error saving pay rule:", error.message);
-
-    res.status(500).json({
-      success: false,
-      message: "Server error",
+  if (!row) {
+    row = await PayRuleConfig.create({
+      config: {
+        basePays: [],
+        increment: {
+          monthlyThreshold: 40,
+          aboveRules: [],
+          belowRules: [],
+        },
+        decrement: [],
+      },
     });
   }
+
+  return row;
+}
+
+// Update (frontend sends full JSON)
+exports.updatePayRules = async (req, res) => {
+  const newConfig = req.body;
+
+  let config = await PayRuleConfig.findOne();
+  if (!config) {
+    config = await PayRuleConfig.create({ config: newConfig });
+  } else {
+    await config.update({ config: newConfig });
+  }
+
+  res.json({ success: true, config: newConfig });
 };
 
-// ⭐ Get Pay Rule
-exports.getPayRule = async (req, res) => {
-  try {
-    const rule = await PayRule.findOne();
+/* =======================================================
+   GET ALL BASE PAY ENTRIES
+======================================================= */
+exports.getBasePays = async (req, res) => {
+  const row = await getConfigRow();
+  res.json(row.config.basePays || []);
+};
 
-    return res.status(200).json({
-      success: true,
-      data: rule ? rule.rules_json : null,
-    });
-  } catch (error) {
-    console.error("❌ Error fetching pay rule:", error.message);
+/* =======================================================
+   CREATE NEW BASE PAY
+======================================================= */
+exports.createBasePay = async (req, res) => {
+  const { classRange, basePay } = req.body;
 
-    res.status(500).json({
-      success: false,
-      message: "Server error",
-    });
-  }
+  const row = await getConfigRow();
+  const cfg = row.config;
+
+  // create manual ID
+  const newId =
+    cfg.basePays.length > 0 ? cfg.basePays[cfg.basePays.length - 1].id + 1 : 1;
+
+  const newEntry = {
+    id: newId,
+    classRange,
+    basePay,
+  };
+
+  cfg.basePays.push(newEntry);
+  await row.update({ config: cfg });
+
+  res.json(newEntry);
+};
+
+/* =======================================================
+   UPDATE BASE PAY
+======================================================= */
+exports.updateBasePay = async (req, res) => {
+  const { id } = req.params;
+  const { classRange, basePay } = req.body;
+
+  const row = await getConfigRow();
+  const cfg = row.config;
+
+  const index = cfg.basePays.findIndex((p) => p.id == id);
+
+  if (index === -1)
+    return res.status(404).json({ message: "Base pay not found" });
+
+  cfg.basePays[index] = {
+    ...cfg.basePays[index],
+    classRange: classRange ?? cfg.basePays[index].classRange,
+    basePay: basePay ?? cfg.basePays[index].basePay,
+  };
+
+  await row.update({ config: cfg });
+
+  res.json(cfg.basePays[index]);
+};
+
+/* =======================================================
+   DELETE BASE PAY
+======================================================= */
+exports.deleteBasePay = async (req, res) => {
+  const { id } = req.params;
+
+  const row = await getConfigRow();
+  const cfg = row.config;
+
+  const newList = cfg.basePays.filter((p) => p.id != id);
+
+  if (newList.length === cfg.basePays.length)
+    return res.status(404).json({ message: "Base pay not found" });
+
+  cfg.basePays = newList;
+
+  await row.update({ config: cfg });
+
+  res.json({ success: true });
 };
