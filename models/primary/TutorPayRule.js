@@ -1,4 +1,3 @@
-// models/PayRule.js
 const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
 
@@ -8,23 +7,15 @@ const PayRule = sequelizePrimary.define(
     config: {
       type: DataTypes.JSON,
       allowNull: false,
+      defaultValue: {},
     },
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
     },
-
     updatedBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
     },
   },
   {

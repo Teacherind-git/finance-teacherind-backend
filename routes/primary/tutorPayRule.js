@@ -1,35 +1,25 @@
 const express = require("express");
 const router = express.Router();
-const payRuleController = require("../../controllers/primary/tutorPayRuleController");
-const { protect, authorizeRoles } = require('../../middlewares/authMiddleware');
+const controller = require("../../controllers/primary/tutorPayRuleController");
+const { protect, authorizeRoles } = require("../../middlewares/authMiddleware");
 
 router.use(protect);
-router.post(
-  "/payrule",
-  authorizeRoles("SuperAdmin"),
-  payRuleController.updatePayRules
-);
-router.get("/payrule", authorizeRoles("SuperAdmin"), payRuleController.getBasePays);
+// PAY RULE
+router.post("/payrule", authorizeRoles("SuperAdmin"), controller.savePayRule);
+router.get("/payrule", authorizeRoles("SuperAdmin"), controller.getPayRuleData);
 
-router.get(
-  "/basepay",
-  authorizeRoles("SuperAdmin"),
-  payRuleController.getBasePays
-);
-router.post(
-  "/basepay",
-  authorizeRoles("SuperAdmin"),
-  payRuleController.createBasePay
-);
+// BASE PAY
+router.post("/basepay", authorizeRoles("SuperAdmin"), controller.createBasePay);
 router.put(
   "/basepay/:id",
   authorizeRoles("SuperAdmin"),
-  payRuleController.updateBasePay
+  controller.updateBasePay
 );
 router.delete(
   "/basepay/:id",
   authorizeRoles("SuperAdmin"),
-  payRuleController.deleteBasePay
+  controller.deleteBasePay
 );
+router.get("/basepay", authorizeRoles("SuperAdmin"), controller.getAllBasePays);
 
 module.exports = router;

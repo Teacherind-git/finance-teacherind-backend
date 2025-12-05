@@ -1,116 +1,118 @@
-const PayRuleConfig = require("../../models/primary/TutorPayRule");
+const PayRule = require("../../models/primary/TutorPayRule");
+const BasePay = require("../../models/primary/BasePay");
+const ClassRange = require("../../models/primary/ClassRange");
 
-// ---- Helper: Load or create empty config ----
-async function getConfigRow() {
-  let row = await PayRuleConfig.findOne();
+// ---------- PAY RULE ----------
+exports.savePayRule = async (req, res) => {
+  try {
+    let payRule = await PayRule.findOne();
 
-  if (!row) {
-    row = await PayRuleConfig.create({
-      config: {
-        basePays: [],
-        increment: {
-          monthlyThreshold: 40,
-          aboveRules: [],
-          belowRules: [],
-        },
-        decrement: [],
-      },
+    if (payRule) {
+      await payRule.update({
+        config: req.body.config,
+        createdBy: req.user.id ?? 10, // fallback to superadmin 10 if needed
+        updatedBy: req.user.id ?? 10,
+      });
+
+      return res.json({ message: "Pay rule updated", payRule });
+    }
+
+    payRule = await PayRule.create({
+      config: req.body.config,
+      createdBy: req.user?.id || null,
+      updatedBy: req.user.id ?? 10,
     });
+
+    res.status(201).json({ message: "Pay rule created", payRule });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
-
-  return row;
-}
-
-// Update (frontend sends full JSON)
-exports.updatePayRules = async (req, res) => {
-  const newConfig = req.body;
-
-  let config = await PayRuleConfig.findOne();
-  if (!config) {
-    config = await PayRuleConfig.create({ config: newConfig });
-  } else {
-    await config.update({ config: newConfig });
-  }
-
-  res.json({ success: true, config: newConfig });
 };
 
-/* =======================================================
-   GET ALL BASE PAY ENTRIES
-======================================================= */
-exports.getBasePays = async (req, res) => {
-  const row = await getConfigRow();
-  res.json(row.config.basePays || []);
-};
-
-/* =======================================================
-   CREATE NEW BASE PAY
-======================================================= */
 exports.createBasePay = async (req, res) => {
-  const { classRange, basePay } = req.body;
+  try {
+    const payRule = await PayRule.findOne();
 
-  const row = await getConfigRow();
-  const cfg = row.config;
+    if (!payRule) {
+      return res.status(400).json({
+        message: "Pay Rule must be created before adding BasePays.",
+      });
+    }
 
-  // create manual ID
-  const newId =
-    cfg.basePays.length > 0 ? cfg.basePays[cfg.basePays.length - 1].id + 1 : 1;
+    const basePay = await BasePay.create({
+      classRangeId: req.body.classRange,
+      basePay: req.body.basePay,
+      payRuleId: payRule.id,
+      createdBy: req.user.id ?? 10, // fallback to superadmin 10 if needed
+      updatedBy: req.user.id ?? 10,
+    });
 
-  const newEntry = {
-    id: newId,
-    classRange,
-    basePay,
-  };
-
-  cfg.basePays.push(newEntry);
-  await row.update({ config: cfg });
-
-  res.json(newEntry);
+    res.status(201).json({ message: "Base pay added", basePay });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
-/* =======================================================
-   UPDATE BASE PAY
-======================================================= */
 exports.updateBasePay = async (req, res) => {
-  const { id } = req.params;
-  const { classRange, basePay } = req.body;
+  try {
+    const basePay = await BasePay.findByPk(req.params.id);
 
-  const row = await getConfigRow();
-  const cfg = row.config;
+    if (!basePay) {
+      return res.status(404).json({ message: "Base pay not found" });
+    }
 
-  const index = cfg.basePays.findIndex((p) => p.id == id);
+    await basePay.update({
+      classRangeId: req.body.classRange,
+      basePay: req.body.basePay,
+      createdBy: req.user.id ?? 10, // fallback to superadmin 10 if needed
+      updatedBy: req.user.id ?? 10,
+    });
 
-  if (index === -1)
-    return res.status(404).json({ message: "Base pay not found" });
-
-  cfg.basePays[index] = {
-    ...cfg.basePays[index],
-    classRange: classRange ?? cfg.basePays[index].classRange,
-    basePay: basePay ?? cfg.basePays[index].basePay,
-  };
-
-  await row.update({ config: cfg });
-
-  res.json(cfg.basePays[index]);
+    res.json({ message: "Base pay updated", basePay });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
-/* =======================================================
-   DELETE BASE PAY
-======================================================= */
 exports.deleteBasePay = async (req, res) => {
-  const { id } = req.params;
+  try {
+    const basePay = await BasePay.findByPk(req.params.id);
+    if (!basePay) return res.status(404).json({ message: "Not found" });
 
-  const row = await getConfigRow();
-  const cfg = row.config;
+    await basePay.destroy();
+    res.json({ message: "Base pay deleted" });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
-  const newList = cfg.basePays.filter((p) => p.id != id);
+exports.getAllBasePays = async (req, res) => {
+  try {
+    const basePays = await BasePay.findAll({
+      include: [
+        {
+          model: ClassRange,
+          as: "classRange",
+          attributes: ["id", "label"],
+        },
+      ],
+      order: [["classRangeId", "ASC"]],
+    });
 
-  if (newList.length === cfg.basePays.length)
-    return res.status(404).json({ message: "Base pay not found" });
+    res.json({ basePays });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 
-  cfg.basePays = newList;
+exports.getPayRuleData = async (req, res) => {
+  try {
+    const payRule = await PayRule.findOne({
+      attributes: ["id", "config", "createdAt", "updatedAt"],
+    });
 
-  await row.update({ config: cfg });
-
-  res.json({ success: true });
+    res.json({ data: payRule });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
