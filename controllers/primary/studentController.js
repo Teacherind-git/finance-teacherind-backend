@@ -14,7 +14,7 @@ exports.createStudent = async (req, res) => {
 
     // 1️⃣ create student
     const student = await Student.create(
-      { name, contact, createdBy: userId, updatedBy: userId },
+      { name, contact, createdBy: userId },
       { transaction: t }
     );
 

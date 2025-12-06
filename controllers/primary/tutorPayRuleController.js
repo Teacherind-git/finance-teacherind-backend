@@ -10,7 +10,6 @@ exports.savePayRule = async (req, res) => {
     if (payRule) {
       await payRule.update({
         config: req.body.config,
-        createdBy: req.user.id ?? 10, // fallback to superadmin 10 if needed
         updatedBy: req.user.id ?? 10,
       });
 
