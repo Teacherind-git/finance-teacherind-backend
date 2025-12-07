@@ -40,7 +40,11 @@ const StudentDetail = sequelizePrimary.define(
     totalPrice: {
       type: DataTypes.FLOAT,
       allowNull: false,
-    }
+    },
+    startDate: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
   },
   {
     tableName: "student_details",
@@ -52,9 +56,11 @@ const StudentDetail = sequelizePrimary.define(
 Student.hasMany(StudentDetail, { as: "details", foreignKey: "studentId" });
 StudentDetail.belongsTo(Student, { foreignKey: "studentId" });
 
-StudentDetail.belongsTo(ClassRange, { as: "class_range", foreignKey: "classId" });
+StudentDetail.belongsTo(ClassRange, {
+  as: "class_range",
+  foreignKey: "classId",
+});
 StudentDetail.belongsTo(Subject, { as: "subject", foreignKey: "subjectId" });
 StudentDetail.belongsTo(Package, { as: "package", foreignKey: "packageId" });
-
 
 module.exports = StudentDetail;
