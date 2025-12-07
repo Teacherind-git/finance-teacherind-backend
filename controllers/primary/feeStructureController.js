@@ -3,43 +3,43 @@ const Subject = require("../../models/primary/Subject");
 const User = require("../../models/primary/User");
 const Package = require("../../models/primary/Package");
 const ClassRange = require("../../models/primary/ClassRange");
+const logger = require("../../utils/logger");
 
 const { Op } = require("sequelize");
 
+// ✅ Get all Fee Structures (with filters)
 exports.getAllFeeStructures = async (req, res) => {
   try {
-    const { subject, addedBy, search } = req.query; // <-- filters from frontend
+    const { subject, addedBy, search } = req.query;
 
-    // Build a dynamic filter (Sequelize "where" object)
+    logger.info("Fetching fee structures", {
+      subject,
+      addedBy,
+      search,
+    });
+
     const whereClause = {};
 
-    if (subject) {
-      whereClause.subjectId = subject;
-    }
+    if (subject) whereClause.subjectId = subject;
+    if (addedBy) whereClause.addedBy = addedBy;
 
-    if (addedBy) {
-      whereClause.addedBy = addedBy;
-    }
-
-    // Optional search filter on name or description (if you have those fields)
     if (search) {
-      whereClause[Op.or] = [{ feePerHour: { [Op.like]: `%${search}%` } }];
+      whereClause[Op.or] = [
+        { feePerHour: { [Op.like]: `%${search}%` } },
+      ];
     }
 
-    // Fetch filtered fee structures ordered by last update
     const data = await FeeStructure.findAll({
       where: whereClause,
       order: [["updatedAt", "DESC"]],
     });
 
-    // Fetch subjects, syllabuses, and users
     const [subjects, users, class_ranges] = await Promise.all([
       Subject.findAll({ attributes: ["id", "name"] }),
       User.findAll({ attributes: ["id", "firstName", "lastName"] }),
       ClassRange.findAll({ attributes: ["id", "label"] }),
     ]);
 
-    // Create lookup maps
     const subjectMap = subjects.reduce((acc, s) => {
       acc[s.id] = s.name;
       return acc;
@@ -50,12 +50,11 @@ exports.getAllFeeStructures = async (req, res) => {
       return acc;
     }, {});
 
-    const classRangeMap = class_ranges.reduce((acc, u) => {
-      acc[u.id] = u.label;
+    const classRangeMap = class_ranges.reduce((acc, r) => {
+      acc[r.id] = r.label;
       return acc;
     }, {});
 
-    // Enrich FeeStructure data with names
     const enrichedData = data.map((item) => ({
       ...item.toJSON(),
       subjectDisplay: subjectMap[item.subjectId] || "Unknown Subject",
@@ -63,19 +62,22 @@ exports.getAllFeeStructures = async (req, res) => {
       classDisplay: classRangeMap[item.classRangeId] || "Unknown Class",
     }));
 
+    logger.info(`Fee structures fetched: ${enrichedData.length}`);
+
     res.json(enrichedData);
   } catch (err) {
-    console.error("Error fetching fee structures:", err);
+    logger.error("Error fetching fee structures", err);
     res.status(500).json({ message: "Failed to fetch fee structures" });
   }
 };
 
-// ✅ Create
+// ✅ Create Fee Structure
 exports.createFeeStructure = async (req, res) => {
   try {
     const userId = req.user?.id;
 
     if (!userId) {
+      logger.warn("Create fee structure failed: Missing user info");
       return res
         .status(400)
         .json({ message: "Unauthorized: Missing user info" });
@@ -85,24 +87,31 @@ exports.createFeeStructure = async (req, res) => {
       ...req.body,
       addedBy: userId,
       createdBy: userId,
-      updatedBy: userId, // optional but recommended
+      updatedBy: userId,
     };
 
     const newRecord = await FeeStructure.create(payload);
+
+    logger.info(`Fee structure created`, {
+      id: newRecord.id,
+      createdBy: userId,
+    });
+
     res.status(201).json(newRecord);
   } catch (err) {
-    console.error("Create error:", err);
+    logger.error("Error creating fee structure", err);
     res.status(500).json({ message: "Failed to create record" });
   }
 };
 
-// ✅ Update
+// ✅ Update Fee Structure
 exports.updateFeeStructure = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
 
     if (!userId) {
+      logger.warn("Update fee structure failed: Missing user info");
       return res
         .status(400)
         .json({ message: "Unauthorized: Missing user info" });
@@ -110,50 +119,59 @@ exports.updateFeeStructure = async (req, res) => {
 
     const payload = {
       ...req.body,
-      updatedBy: userId, // 👈 always set updatedBy
+      updatedBy: userId,
     };
 
-    const [updated] = await FeeStructure.update(payload, { where: { id } });
+    const [updated] = await FeeStructure.update(payload, {
+      where: { id },
+    });
 
     if (!updated) {
+      logger.warn(`Fee structure not found for update: ${id}`);
       return res.status(404).json({ message: "Record not found" });
     }
 
+    logger.info(`Fee structure updated`, {
+      id,
+      updatedBy: userId,
+    });
+
     res.json({ message: "Updated successfully" });
   } catch (err) {
-    console.error("Update error:", err);
+    logger.error("Error updating fee structure", err);
     res.status(500).json({ message: "Failed to update record" });
   }
 };
 
-// ✅ Delete
+// ✅ Delete Fee Structure
 exports.deleteFeeStructure = async (req, res) => {
   try {
     const { id } = req.params;
-    await FeeStructure.destroy({ where: { id } });
+
+    const deleted = await FeeStructure.destroy({ where: { id } });
+
+    if (!deleted) {
+      logger.warn(`Fee structure not found for delete: ${id}`);
+      return res.status(404).json({ message: "Record not found" });
+    }
+
+    logger.info(`Fee structure deleted`, { id });
+
     res.json({ message: "Deleted successfully" });
   } catch (err) {
-    console.error("Delete error:", err);
+    logger.error("Error deleting fee structure", err);
     res.status(500).json({ message: "Failed to delete record" });
   }
 };
 
-// Count
+// ✅ Fee Management Summary
 exports.getFeeManagementSummary = async (req, res) => {
   try {
-    // Count Fee Structures
-    const feeStructureCount = await FeeStructure.count();
+    logger.info("Fetching fee management summary");
 
-    // Count Packages
+    const feeStructureCount = await FeeStructure.count();
     const packageCount = await Package.count();
 
-    /**
-     * ⚠️ Replace this block with real stats from DB
-     * Example source:
-     * - TutorAttendance
-     * - ClassLogs
-     * - TutorSessions
-     */
     const tutorStats = {
       totalClasses: 100,
       onTimeClasses: 80,
@@ -163,17 +181,24 @@ exports.getFeeManagementSummary = async (req, res) => {
     const averageTutorPayPercentage =
       calculateAverageTutorPayPercent(tutorStats);
 
+    logger.info("Fee summary generated", {
+      feeStructureCount,
+      packageCount,
+      averageTutorPayPercentage,
+    });
+
     return res.status(200).json({
       feeStructures: feeStructureCount,
       packages: packageCount,
-      averageTutorPayPercentage, // ✅ added here
+      averageTutorPayPercentage,
     });
   } catch (error) {
-    console.error("Error fetching fee summary:", error);
-    return res.status(500).json({ message: "Server Error", error });
+    logger.error("Error fetching fee summary", error);
+    return res.status(500).json({ message: "Server Error" });
   }
 };
 
+// ✅ Utility
 function calculateAverageTutorPayPercent({
   totalClasses,
   onTimeClasses,
@@ -192,7 +217,7 @@ function calculateAverageTutorPayPercent({
   const decrement = missedClasses * DEC_PERCENT;
 
   let percent = 100 + increment - decrement;
-  percent = Math.max(0, percent); // safety
+  percent = Math.max(0, percent);
 
   return Number(percent.toFixed(2));
 }

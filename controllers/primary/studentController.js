@@ -2,23 +2,28 @@ const Student = require("../../models/primary/Student");
 const StudentDetail = require("../../models/primary/StudentDetail");
 const Subject = require("../../models/primary/Subject");
 const Package = require("../../models/primary/Package");
-const { sequelizePrimary } = require("../../config/db");
 const ClassRange = require("../../models/primary/ClassRange");
+const { sequelizePrimary } = require("../../config/db");
+const logger = require("../../utils/logger");
 
-// CREATE STUDENT WITH DETAILS
+/* ================= CREATE STUDENT ================= */
 exports.createStudent = async (req, res) => {
   const t = await sequelizePrimary.transaction();
   try {
     const userId = req.user.id;
     const { name, contact, details } = req.body;
 
-    // 1️⃣ create student
+    logger.info("Creating student", {
+      name,
+      createdBy: userId,
+      detailsCount: details?.length,
+    });
+
     const student = await Student.create(
       { name, contact, createdBy: userId },
       { transaction: t }
     );
 
-    // 2️⃣ create student details
     const detailsToCreate = details.map((d) => ({
       ...d,
       studentId: student.id,
@@ -28,24 +33,29 @@ exports.createStudent = async (req, res) => {
 
     await t.commit();
 
-    // Fetch full student with details
     const created = await Student.findByPk(student.id, {
       include: { model: StudentDetail, as: "details" },
+    });
+
+    logger.info("Student created successfully", {
+      studentId: student.id,
     });
 
     res.status(201).json({ success: true, student: created });
   } catch (error) {
     await t.rollback();
-    console.error(error);
+    logger.error("Error creating student", error);
     res
       .status(500)
       .json({ success: false, message: "Failed to create student" });
   }
 };
 
-// GET ALL STUDENTS WITH DETAILS
+/* ================= GET ALL STUDENTS ================= */
 exports.getAllStudents = async (req, res) => {
   try {
+    logger.info("Fetching all students");
+
     const students = await Student.findAll({
       include: [
         {
@@ -55,26 +65,28 @@ exports.getAllStudents = async (req, res) => {
             {
               model: ClassRange,
               as: "class_range",
-              attributes: ["id", "label"], // 👈 class range label
+              attributes: ["id", "label"],
             },
             {
               model: Subject,
               as: "subject",
-              attributes: ["id", "name"], // 👈 subject name
+              attributes: ["id", "name"],
             },
             {
               model: Package,
               as: "package",
-              attributes: ["id", "name"], // 👈 package name
+              attributes: ["id", "name"],
             },
           ],
         },
       ],
     });
 
+    logger.info(`Students fetched: ${students.length}`);
+
     res.status(200).json({ success: true, students });
   } catch (error) {
-    console.error(error);
+    logger.error("Error fetching students", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch students",
@@ -82,53 +94,68 @@ exports.getAllStudents = async (req, res) => {
   }
 };
 
-// GET SINGLE STUDENT
+/* ================= GET SINGLE STUDENT ================= */
 exports.getStudent = async (req, res) => {
   try {
-    const student = await Student.findByPk(req.params.id, {
+    const { id } = req.params;
+
+    logger.info(`Fetching student by ID: ${id}`);
+
+    const student = await Student.findByPk(id, {
       include: { model: StudentDetail, as: "details" },
     });
-    if (!student)
+
+    if (!student) {
+      logger.warn(`Student not found: ${id}`);
       return res
         .status(404)
         .json({ success: false, message: "Student not found" });
+    }
 
     res.status(200).json({ success: true, student });
   } catch (error) {
-    console.error(error);
+    logger.error("Error fetching student", error);
     res
       .status(500)
       .json({ success: false, message: "Failed to fetch student" });
   }
 };
 
-// UPDATE STUDENT + DETAILS
+/* ================= UPDATE STUDENT ================= */
 exports.updateStudent = async (req, res) => {
   const t = await sequelizePrimary.transaction();
   try {
     const userId = req.user.id;
     const { name, contact, details } = req.body;
 
+    logger.info("Updating student", {
+      studentId: req.params.id,
+      updatedBy: userId,
+    });
+
     const student = await Student.findByPk(req.params.id);
-    if (!student)
+    if (!student) {
+      logger.warn(`Student not found for update: ${req.params.id}`);
       return res
         .status(404)
         .json({ success: false, message: "Student not found" });
+    }
 
     await student.update(
       { name, contact, updatedBy: userId },
       { transaction: t }
     );
 
-    // Remove old details and insert new ones
     await StudentDetail.destroy({
       where: { studentId: student.id },
       transaction: t,
     });
+
     const detailsToCreate = details.map((d) => ({
       ...d,
       studentId: student.id,
     }));
+
     await StudentDetail.bulkCreate(detailsToCreate, { transaction: t });
 
     await t.commit();
@@ -137,37 +164,51 @@ exports.updateStudent = async (req, res) => {
       include: { model: StudentDetail, as: "details" },
     });
 
+    logger.info("Student updated successfully", {
+      studentId: student.id,
+    });
+
     res.status(200).json({ success: true, student: updatedStudent });
   } catch (error) {
     await t.rollback();
-    console.error(error);
+    logger.error("Error updating student", error);
     res
       .status(500)
       .json({ success: false, message: "Failed to update student" });
   }
 };
 
-// DELETE STUDENT + DETAILS
+/* ================= DELETE STUDENT ================= */
 exports.deleteStudent = async (req, res) => {
   const t = await sequelizePrimary.transaction();
   try {
+    logger.info("Deleting student", { studentId: req.params.id });
+
     const student = await Student.findByPk(req.params.id);
-    if (!student)
+    if (!student) {
+      logger.warn(`Student not found for delete: ${req.params.id}`);
       return res
         .status(404)
         .json({ success: false, message: "Student not found" });
+    }
 
     await StudentDetail.destroy({
       where: { studentId: student.id },
       transaction: t,
     });
+
     await student.destroy({ transaction: t });
 
     await t.commit();
+
+    logger.info("Student deleted successfully", {
+      studentId: student.id,
+    });
+
     res.status(200).json({ success: true, message: "Student deleted" });
   } catch (error) {
     await t.rollback();
-    console.error(error);
+    logger.error("Error deleting student", error);
     res
       .status(500)
       .json({ success: false, message: "Failed to delete student" });

@@ -1,6 +1,7 @@
 const User = require("../../models/primary/User");
 const Role = require("../../models/primary/Role");
 const jwt = require("jsonwebtoken");
+const logger = require("../../utils/logger");
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "1d" });
@@ -19,7 +20,8 @@ exports.register = async (req, res) => {
       position,
     } = req.body;
 
-    // Validate input
+    logger.info(`Register attempt for email: ${email}`);
+
     if (
       !firstName ||
       !email ||
@@ -28,31 +30,31 @@ exports.register = async (req, res) => {
       !department ||
       !position
     ) {
+      logger.warn("Registration failed: Missing required fields");
       return res.status(400).json({
         success: false,
         message: "All fields are required",
       });
     }
 
-    // Find role by name
     const role = await Role.findOne({ where: { name: roleName } });
     if (!role) {
+      logger.warn(`Invalid role name during registration: ${roleName}`);
       return res.status(400).json({
         success: false,
         message: "Invalid role name",
       });
     }
 
-    // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
+      logger.warn(`Registration failed: User already exists (${email})`);
       return res.status(400).json({
         success: false,
         message: "User already exists",
       });
     }
 
-    // Create user
     const user = await User.create({
       firstName,
       lastName,
@@ -62,6 +64,8 @@ exports.register = async (req, res) => {
       department,
       position,
     });
+
+    logger.info(`User registered successfully: ${user.id}`);
 
     res.status(201).json({
       success: true,
@@ -75,7 +79,7 @@ exports.register = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Registration error:", error);
+    logger.error("Registration error", error);
     res.status(500).json({
       success: false,
       message: "Server error",
@@ -88,36 +92,40 @@ exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    logger.info(`Login attempt for email: ${email}`);
+
     if (!email || !password) {
+      logger.warn("Login failed: Email or password missing");
       return res.status(400).json({
         success: false,
         message: "Email and password are required",
       });
     }
 
-    // Fetch user with role
     const user = await User.findOne({
       where: { email },
       include: [{ model: Role, as: "role", attributes: ["id", "name"] }],
     });
 
     if (!user) {
+      logger.warn(`Login failed: User not found (${email})`);
       return res.status(404).json({
         success: false,
         message: "Invalid email or password",
       });
     }
 
-    // Check password
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
+      logger.warn(`Login failed: Wrong password (${email})`);
       return res.status(404).json({
         success: false,
         message: "Invalid email or password",
       });
     }
 
-    // Successful login
+    logger.info(`Login successful: User ID ${user.id}`);
+
     res.status(200).json({
       success: true,
       message: "Login successful",
@@ -132,7 +140,7 @@ exports.login = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Login error:", error);
+    logger.error("Login error", error);
     res.status(500).json({
       success: false,
       message: "Server error",
@@ -140,11 +148,13 @@ exports.login = async (req, res) => {
   }
 };
 
-// Get all roles
+// ✅ Get all roles
 exports.getAllRoles = async (req, res) => {
   try {
+    logger.info("Fetching all roles");
+
     const roles = await Role.findAll({
-      order: [["id", "ASC"]], // optional: sorts by ID ascending
+      order: [["id", "ASC"]],
     });
 
     res.status(200).json({
@@ -153,7 +163,7 @@ exports.getAllRoles = async (req, res) => {
       roles,
     });
   } catch (error) {
-    console.error("Error fetching roles:", error);
+    logger.error("Error fetching roles", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch roles",

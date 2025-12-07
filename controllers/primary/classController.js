@@ -3,60 +3,81 @@ const Class = require("../../models/primary/Class");
 const Subject = require("../../models/primary/Subject");
 const Syllabus = require("../../models/primary/Syllabus");
 const ClassRange = require("../../models/primary/ClassRange");
+const logger = require("../../utils/logger");
 
-// Get all classes
+// ✅ Get all classes
 exports.getAllClasses = async (req, res) => {
   try {
+    logger.info("Fetching all classes");
+
     const data = await Class.findAll();
+
     res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error("Error fetching classes:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    logger.error("Error fetching classes", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 
-// Get all subjects
+// ✅ Get all subjects
 exports.getAllSubjects = async (req, res) => {
   try {
+    logger.info("Fetching all subjects");
+
     const data = await Subject.findAll();
+
     res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error("Error fetching subjects:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    logger.error("Error fetching subjects", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 
-// Get all syllabus
+// ✅ Get all syllabus
 exports.getAllSyllabus = async (req, res) => {
   try {
+    logger.info("Fetching all syllabus");
+
     const data = await Syllabus.findAll();
+
     res.status(200).json({ success: true, data });
   } catch (error) {
-    console.error("Error fetching syllabus:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    logger.error("Error fetching syllabus", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };
 
-// ✅ Optional combined API
+// ✅ Combined API (Classes + Subjects + Syllabus + ClassRanges)
 exports.getAllData = async (req, res) => {
   try {
+    logger.info("Fetching combined class, subject, syllabus & range data");
+
     const [classes, subjects, syllabus, classRanges] = await Promise.all([
-      // ⭐ Sort classes by number (numeric sort)
+      // ⭐ Sort classes numerically
       Class.findAll({
         order: [[sequelizePrimary.literal("CAST(number AS UNSIGNED)"), "ASC"]],
       }),
 
-      // ⭐ Sort subjects
+      // ⭐ Sort subjects alphabetically
       Subject.findAll({
         order: [["name", "ASC"]],
       }),
 
-      // ⭐ Sort syllabus
+      // ⭐ Sort syllabus alphabetically
       Syllabus.findAll({
         order: [["name", "ASC"]],
       }),
 
-      // ⭐ NEW → Fetch class ranges sorted logically
+      // ⭐ Sort class ranges logically
       ClassRange.findAll({
         order: [
           [sequelizePrimary.literal("CAST(fromClass AS UNSIGNED)"), "ASC"],
@@ -64,23 +85,28 @@ exports.getAllData = async (req, res) => {
       }),
     ]);
 
-    // ⭐ Clean unwanted fields (if any)
+    logger.info(
+      `Fetched data counts → Classes: ${classes.length}, Subjects: ${subjects.length}, Syllabus: ${syllabus.length}, Ranges: ${classRanges.length}`
+    );
+
+    // ⭐ Clean subjects
     const cleanedSubjects = subjects.map((item) => ({
       ...item.toJSON(),
       name: item.name,
       content: item.content,
     }));
 
+    // ⭐ Clean syllabus
     const cleanedSyllabus = syllabus.map((item) => ({
       ...item.toJSON(),
       name: item.name,
       content: item.content,
     }));
 
-    // ⭐ Format class ranges to match UI needs
+    // ⭐ Format class ranges for UI
     const formattedRanges = classRanges.map((r) => ({
       id: r.id,
-      label: r.label, // Example: "Class 1–4"
+      label: r.label, // e.g. "Class 1–4"
       fromClass: r.fromClass,
       toClass: r.toClass,
     }));
@@ -90,10 +116,13 @@ exports.getAllData = async (req, res) => {
       classes,
       subjects: cleanedSubjects,
       syllabus: cleanedSyllabus,
-      classRanges: formattedRanges, // ⭐ add here
+      classRanges: formattedRanges,
     });
   } catch (error) {
-    console.error("Error fetching all data:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    logger.error("Error fetching combined academic data", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };

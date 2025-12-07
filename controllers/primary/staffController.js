@@ -5,42 +5,47 @@ const Staff = require("../../models/primary/Staff");
 const StaffDocument = require("../../models/primary/StaffDocument");
 const User = require("../../models/primary/User");
 const Role = require("../../models/primary/Role");
+const logger = require("../../utils/logger");
 
 /* ================= CREATE STAFF (STEP 1) ================= */
 exports.createStaff = async (req, res) => {
   try {
     const data = req.body;
 
-    // 🔍 Check if user already exists
-    const existingUser = await User.findOne({ where: { email: data.email } });
+    logger.info("Creating staff", {
+      email: data.email,
+      createdBy: req.user.id,
+    });
 
-    // Hash password only if we might create a user
+    const existingUser = await User.findOne({
+      where: { email: data.email },
+    });
+
     let hashedPassword = null;
     if (!existingUser && data.password) {
       hashedPassword = await bcrypt.hash(data.password, 10);
     }
 
-    // Handle profile photo
     if (req.files?.profilePhoto) {
       data.profilePhoto = `/uploads/profile/${req.files.profilePhoto[0].filename}`;
     }
 
-    // Parse bank details
-    data.bankDetails = data.bankDetails ? JSON.parse(data.bankDetails) : null;
+    data.bankDetails = data.bankDetails
+      ? JSON.parse(data.bankDetails)
+      : null;
 
     data.createdBy = req.user.id;
 
-    // 1️⃣ Create staff (ALWAYS)
     const staff = await Staff.create(data);
 
     let user = null;
 
-    // 2️⃣ Create user ONLY if not existing
     if (!existingUser) {
       const roleName = data.roleName || "Staff";
       const role = await Role.findOne({ where: { name: roleName } });
 
       if (!role) {
+        logger.warn(`Invalid role during staff creation: ${roleName}`);
         return res.status(400).json({
           success: false,
           message: "Invalid role",
@@ -61,7 +66,11 @@ exports.createStaff = async (req, res) => {
       });
     }
 
-    // ✅ Always success
+    logger.info("Staff created successfully", {
+      staffId: staff.id,
+      userId: user ? user.id : existingUser?.id,
+    });
+
     return res.status(201).json({
       success: true,
       message: existingUser
@@ -71,7 +80,7 @@ exports.createStaff = async (req, res) => {
       userId: user ? user.id : existingUser?.id,
     });
   } catch (err) {
-    console.error("❌ Error creating staff:", err);
+    logger.error("Error creating staff", err);
     res.status(500).json({
       success: false,
       message: "Failed to create staff",
@@ -83,22 +92,33 @@ exports.createStaff = async (req, res) => {
 exports.updateStaff = async (req, res) => {
   try {
     const staff = await Staff.findByPk(req.params.id);
-    if (!staff) return res.status(404).json({ message: "Not found" });
+    if (!staff) {
+      logger.warn(`Staff not found for update: ${req.params.id}`);
+      return res.status(404).json({ message: "Not found" });
+    }
 
     let { bankDetails } = req.body;
-
-    // ✅ convert back to object
     if (bankDetails && typeof bankDetails === "string") {
       bankDetails = JSON.parse(bankDetails);
+      req.body.bankDetails = bankDetails;
     }
 
     req.body.updatedBy = req.user.id;
 
     await staff.update(req.body);
+
+    logger.info("Staff updated", {
+      staffId: staff.id,
+      updatedBy: req.user.id,
+    });
+
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    logger.error("Error updating staff", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 
@@ -106,11 +126,15 @@ exports.updateStaff = async (req, res) => {
 exports.uploadDocuments = async (req, res) => {
   try {
     if (!req.files?.documents?.length) {
+      logger.warn("No documents uploaded");
       return res.status(400).json({ message: "No documents uploaded" });
     }
 
     const staff = await Staff.findByPk(req.params.id);
-    if (!staff) return res.status(404).json({ message: "Not found" });
+    if (!staff) {
+      logger.warn(`Staff not found for document upload: ${req.params.id}`);
+      return res.status(404).json({ message: "Not found" });
+    }
 
     await StaffDocument.bulkCreate(
       req.files.documents.map((file) => ({
@@ -121,10 +145,18 @@ exports.uploadDocuments = async (req, res) => {
       }))
     );
 
+    logger.info("Staff documents uploaded", {
+      staffId: staff.id,
+      count: req.files.documents.length,
+    });
+
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, message: err.message });
+    logger.error("Error uploading staff documents", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
 
@@ -134,27 +166,26 @@ exports.getStaff = async (req, res) => {
     include: ["documents"],
   });
 
-  if (!staff) return res.status(404).json({ message: "Not found" });
+  if (!staff) {
+    logger.warn(`Staff not found: ${req.params.id}`);
+    return res.status(404).json({ message: "Not found" });
+  }
+
   res.json(staff);
 };
 
+/* ================= GET ALL STAFF ================= */
 exports.getAllStaff = async (req, res) => {
   try {
-    // 1️⃣ Fetch all staff
+    logger.info("Fetching all staff");
+
     const staffList = await Staff.findAll({
-      include: [
-        {
-          model: StaffDocument,
-          as: "documents",
-        },
-      ],
+      include: [{ model: StaffDocument, as: "documents" }],
       order: [["createdAt", "DESC"]],
     });
 
-    // 2️⃣ Extract emails of existing staff
     const staffEmails = staffList.map((staff) => staff.email);
 
-    // 3️⃣ Fetch new users (roleId 3) not in staff
     const newUsers = await User.findAll({
       where: {
         roleId: 3,
@@ -181,13 +212,11 @@ exports.getAllStaff = async (req, res) => {
       ],
     });
 
-    // 4️⃣ Collect all createdBy IDs
     const createdByIds = [
       ...staffList.map((s) => s.createdBy),
       ...newUsers.map((u) => u.createdBy),
-    ].filter(Boolean); // remove null/undefined
+    ].filter(Boolean);
 
-    // 5️⃣ Fetch users who created these records
     const creators = await User.findAll({
       where: { id: { [Op.in]: createdByIds } },
       attributes: ["id", "firstName", "lastName"],
@@ -198,35 +227,35 @@ exports.getAllStaff = async (req, res) => {
       creatorMap[c.id] = `${c.firstName} ${c.lastName}`;
     });
 
-    // 6️⃣ Map staff
-    const formattedStaff = staffList.map((staff) => {
-      const s = staff.toJSON();
-      return {
-        ...s,
-        createdBy: s.createdBy ? creatorMap[s.createdBy] || "Unknown" : null,
-      };
-    });
+    const formattedStaff = staffList.map((s) => ({
+      ...s.toJSON(),
+      createdBy: s.createdBy
+        ? creatorMap[s.createdBy] || "Unknown"
+        : null,
+    }));
 
-    // 7️⃣ Map new users
-    const formattedUsers = newUsers.map((user) => {
-      const u = user.toJSON();
-      return {
-        ...u,
-        fullName: `${u.firstName} ${u.lastName}`,
-        profilePhoto: "",
-        roleName: u.role?.name || "",
-        documents: [],
-        status: u.isActive ? "Active" : "Inactive",
-        createdBy: u.createdBy ? creatorMap[u.createdBy] || "Unknown" : null,
-      };
-    });
+    const formattedUsers = newUsers.map((u) => ({
+      ...u.toJSON(),
+      fullName: `${u.firstName} ${u.lastName}`,
+      profilePhoto: "",
+      roleName: u.role?.name || "",
+      documents: [],
+      status: u.isActive ? "Active" : "Inactive",
+      createdBy: u.createdBy
+        ? creatorMap[u.createdBy] || "Unknown"
+        : null,
+    }));
 
-    // 8️⃣ Combine both
     const combinedList = [...formattedStaff, ...formattedUsers];
+
+    logger.info("Staff list fetched", {
+      staffCount: formattedStaff.length,
+      newUsers: formattedUsers.length,
+    });
 
     res.status(200).json(combinedList);
   } catch (error) {
-    console.error("Get staff error:", error);
+    logger.error("Error fetching staff list", error);
     res.status(500).json({ message: "Failed to fetch staff" });
   }
 };
@@ -236,7 +265,11 @@ exports.deleteStaff = async (req, res) => {
   const staff = await Staff.findByPk(req.params.id, {
     include: ["documents"],
   });
-  if (!staff) return res.status(404).json({ message: "Not found" });
+
+  if (!staff) {
+    logger.warn(`Staff not found for delete: ${req.params.id}`);
+    return res.status(404).json({ message: "Not found" });
+  }
 
   if (staff.profilePhoto) {
     fs.unlinkSync(`public${staff.profilePhoto}`);
@@ -247,15 +280,27 @@ exports.deleteStaff = async (req, res) => {
   });
 
   await staff.destroy();
+
+  logger.info("Staff deleted", { staffId: staff.id });
+
   res.json({ success: true });
 };
 
 /* ================= DELETE DOCUMENT ================= */
 exports.deleteDocument = async (req, res) => {
   const doc = await StaffDocument.findByPk(req.params.docId);
-  if (!doc) return res.status(404).json({ message: "Not found" });
+  if (!doc) {
+    logger.warn(`Document not found: ${req.params.docId}`);
+    return res.status(404).json({ message: "Not found" });
+  }
 
   fs.unlinkSync(`public${doc.filePath}`);
   await doc.destroy();
+
+  logger.info("Staff document deleted", {
+    documentId: doc.id,
+    staffId: doc.staffId,
+  });
+
   res.json({ success: true });
 };

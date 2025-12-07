@@ -1,11 +1,18 @@
 const User = require("../../models/primary/User");
 const Role = require("../../models/primary/Role");
 const { Op } = require("sequelize");
+const logger = require("../../utils/logger");
 
-// ✅ Get all users
+/* ================= GET ALL USERS ================= */
 exports.getAllUsers = async (req, res) => {
   try {
-    const { type } = req.query; // SuperAdmin / Others
+    const { type } = req.query;
+
+    logger.info("Fetching users", {
+      requestedBy: req.user.id,
+      role: req.user.role?.name,
+      type,
+    });
 
     const commonInclude = [
       {
@@ -23,25 +30,18 @@ exports.getAllUsers = async (req, res) => {
 
     let whereCondition = {};
 
-    // -----------------------------------------
-    // 1️⃣ Normal User → only see their created users
-    // -----------------------------------------
+    /* ---------- Normal User ---------- */
     if (req.user.role.name === "User") {
       whereCondition = { createdBy: req.user.id };
     }
 
-    // -----------------------------------------
-    // 2️⃣ SuperAdmin Special Filtering
-    // -----------------------------------------
+    /* ---------- SuperAdmin ---------- */
     if (req.user.role.name === "SuperAdmin") {
       if (type === "SuperAdmin") {
-        // Return ONLY users created by logged-in super admin
         whereCondition = { createdBy: req.user.id };
       } else if (type === "Others") {
-        // Return users NOT created by logged-in super admin
         whereCondition = { createdBy: { [Op.ne]: req.user.id } };
       }
-      // If no query param → return all users (default)
     }
 
     const users = await User.findAll({
@@ -51,24 +51,27 @@ exports.getAllUsers = async (req, res) => {
       order: [["id", "ASC"]],
     });
 
-    // Add creatorName field
     const usersWithCreatorName = users.map((u) => {
-      const userJSON = u.toJSON();
-      userJSON.creatorName = u.creator
+      const json = u.toJSON();
+      json.creatorName = u.creator
         ? `${u.creator.firstName} ${u.creator.lastName}`.trim()
         : null;
-      return userJSON;
+      return json;
     });
 
-    res.status(200).json({ success: true, users: usersWithCreatorName });
+    logger.info(`Users fetched: ${users.length}`);
+
+    res.status(200).json({
+      success: true,
+      users: usersWithCreatorName,
+    });
   } catch (error) {
-    console.error("❌ Error fetching users:", error);
+    logger.error("Error fetching users", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-
-// ✅ Create user
+/* ================= CREATE USER ================= */
 exports.createUser = async (req, res) => {
   try {
     const {
@@ -84,19 +87,28 @@ exports.createUser = async (req, res) => {
       address,
     } = req.body;
 
-    // Validate role
-    const role = await Role.findOne({ where: { name: roleName } });
-    if (!role)
-      return res.status(400).json({ success: false, message: "Invalid role" });
+    logger.info("Creating user", {
+      email,
+      roleName,
+      createdBy: req.user.id,
+    });
 
-    // Check if email already exists
+    const role = await Role.findOne({ where: { name: roleName } });
+    if (!role) {
+      logger.warn("Invalid role during user creation", { roleName });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid role" });
+    }
+
     const existing = await User.findOne({ where: { email } });
-    if (existing)
+    if (existing) {
+      logger.warn("Duplicate user email", { email });
       return res
         .status(400)
         .json({ success: false, message: "Email already exists" });
+    }
 
-    // Create user with createdBy & updatedBy
     const user = await User.create({
       firstName,
       lastName,
@@ -108,18 +120,20 @@ exports.createUser = async (req, res) => {
       phone: phone || "",
       taxId: taxId || "",
       address: address || {},
-      createdBy: req.user.id, // 👈 who created
-      updatedBy: req.user.id, // 👈 who updated initially
+      createdBy: req.user.id,
+      updatedBy: req.user.id,
     });
+
+    logger.info("User created successfully", { userId: user.id });
 
     res.status(201).json({ success: true, data: user });
   } catch (error) {
-    console.error("❌ Error creating user:", error.message);
+    logger.error("Error creating user", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// ✅ Update user
+/* ================= UPDATE USER ================= */
 exports.updateUser = async (req, res) => {
   try {
     const {
@@ -134,13 +148,19 @@ exports.updateUser = async (req, res) => {
       address,
     } = req.body;
 
+    logger.info("Updating user", {
+      userId: req.params.id,
+      updatedBy: req.user.id,
+    });
+
     const user = await User.findByPk(req.params.id);
-    if (!user)
+    if (!user) {
+      logger.warn("User not found for update", { id: req.params.id });
       return res
         .status(404)
         .json({ success: false, message: "User not found" });
+    }
 
-    // Update role if provided
     if (roleName) {
       const role = await Role.findOne({ where: { name: roleName } });
       if (!role)
@@ -150,7 +170,6 @@ exports.updateUser = async (req, res) => {
       user.roleId = role.id;
     }
 
-    // Update normal fields
     user.firstName = firstName ?? user.firstName;
     user.lastName = lastName ?? user.lastName;
     user.email = email ?? user.email;
@@ -159,39 +178,48 @@ exports.updateUser = async (req, res) => {
     user.phone = phone ?? user.phone;
     user.taxId = taxId ?? user.taxId;
 
-    // Update address (merged)
     if (address) {
       user.address = { ...user.address, ...address };
     }
 
-    // 👈 Track who updated the user
     user.updatedBy = req.user.id;
 
     await user.save();
 
+    logger.info("User updated", { userId: user.id });
+
     res.status(200).json({ success: true, data: user });
   } catch (error) {
-    console.error("❌ Error updating user:", error.message);
+    logger.error("Error updating user", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// ✅ Delete user
+/* ================= DELETE USER ================= */
 exports.deleteUser = async (req, res) => {
   try {
+    logger.info("Deleting user", {
+      userId: req.params.id,
+      deletedBy: req.user.id,
+    });
+
     const user = await User.findByPk(req.params.id);
-    if (!user)
+    if (!user) {
+      logger.warn("User not found for delete", { id: req.params.id });
       return res
         .status(404)
         .json({ success: false, message: "User not found" });
+    }
 
     await user.destroy();
+
+    logger.info("User deleted", { userId: req.params.id });
 
     res
       .status(200)
       .json({ success: true, message: "User deleted successfully" });
   } catch (error) {
-    console.error("❌ Error deleting user:", error.message);
+    logger.error("Error deleting user", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
