@@ -15,7 +15,7 @@ const FeeStructure = sequelizePrimary.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: "class_ranges",   // table name of ClassRange
+        model: "class_ranges", // table name of ClassRange
         key: "id",
       },
     },
@@ -37,6 +37,12 @@ const FeeStructure = sequelizePrimary.define(
     addedBy: {
       type: DataTypes.STRING,
       allowNull: false,
+    },
+
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
 
     createdBy: {

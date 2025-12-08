@@ -2,7 +2,6 @@ const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
 const Student = require("./Student");
 
-
 const StudentBill = sequelizePrimary.define(
   "student_bill",
   {
@@ -15,6 +14,11 @@ const StudentBill = sequelizePrimary.define(
       type: DataTypes.STRING,
       defaultValue: "Pending",
       allowNull: false,
+    },
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
     createdBy: {
       type: DataTypes.INTEGER,

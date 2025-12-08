@@ -32,15 +32,18 @@ exports.getAllUsers = async (req, res) => {
 
     /* ---------- Normal User ---------- */
     if (req.user.role.name === "User") {
-      whereCondition = { createdBy: req.user.id };
+      whereCondition = { createdBy: req.user.id, isDeleted: false };
     }
 
     /* ---------- SuperAdmin ---------- */
     if (req.user.role.name === "SuperAdmin") {
       if (type === "SuperAdmin") {
-        whereCondition = { createdBy: req.user.id };
+        whereCondition = { createdBy: req.user.id, isDeleted: false };
       } else if (type === "Others") {
-        whereCondition = { createdBy: { [Op.ne]: req.user.id } };
+        whereCondition = {
+          createdBy: { [Op.ne]: req.user.id },
+          isDeleted: false,
+        };
       }
     }
 
@@ -96,9 +99,7 @@ exports.createUser = async (req, res) => {
     const role = await Role.findOne({ where: { name: roleName } });
     if (!role) {
       logger.warn("Invalid role during user creation", { roleName });
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid role" });
+      return res.status(400).json({ success: false, message: "Invalid role" });
     }
 
     const existing = await User.findOne({ where: { email } });
@@ -198,12 +199,18 @@ exports.updateUser = async (req, res) => {
 /* ================= DELETE USER ================= */
 exports.deleteUser = async (req, res) => {
   try {
-    logger.info("Deleting user", {
+    logger.info("Soft deleting user", {
       userId: req.params.id,
       deletedBy: req.user.id,
     });
 
-    const user = await User.findByPk(req.params.id);
+    const user = await User.findOne({
+      where: {
+        id: req.params.id,
+        isDeleted: false,
+      },
+    });
+
     if (!user) {
       logger.warn("User not found for delete", { id: req.params.id });
       return res
@@ -211,15 +218,26 @@ exports.deleteUser = async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
-    await user.destroy();
+    await user.update({
+      isDeleted: true,
+      updatedBy: req.user.id, // ✅ optional audit
+      status: "Inactive", // ✅ if you have status
+    });
 
-    logger.info("User deleted", { userId: req.params.id });
+    logger.info("User soft deleted", {
+      userId: req.params.id,
+      deletedBy: req.user.id,
+    });
 
-    res
-      .status(200)
-      .json({ success: true, message: "User deleted successfully" });
+    res.status(200).json({
+      success: true,
+      message: "User deleted successfully",
+    });
   } catch (error) {
-    logger.error("Error deleting user", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    logger.error("Error soft deleting user", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
   }
 };

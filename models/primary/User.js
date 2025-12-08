@@ -71,10 +71,19 @@ const User = sequelizePrimary.define(
       defaultValue: {},
     },
 
-    isActive: {
+    status: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: "Active",
+      validate: {
+        isIn: [["Active", "Inactive"]],
+      },
+    },
+
+    isDeleted: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
-      defaultValue: true,
+      defaultValue: false,
     },
 
     createdBy: {

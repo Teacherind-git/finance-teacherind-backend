@@ -9,6 +9,12 @@ const PayRule = sequelizePrimary.define(
       allowNull: false,
       defaultValue: {},
     },
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: true,

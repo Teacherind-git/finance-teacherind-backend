@@ -26,7 +26,11 @@ const Package = sequelizePrimary.define(
 
     isHighlight: { type: DataTypes.BOOLEAN, defaultValue: false },
     isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
-
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: true,

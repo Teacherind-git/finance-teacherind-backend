@@ -18,15 +18,15 @@ exports.getAllFeeStructures = async (req, res) => {
       search,
     });
 
-    const whereClause = {};
+    const whereClause = {
+      isDeleted: false, // ✅ exclude soft-deleted
+    };
 
     if (subject) whereClause.subjectId = subject;
     if (addedBy) whereClause.addedBy = addedBy;
 
     if (search) {
-      whereClause[Op.or] = [
-        { feePerHour: { [Op.like]: `%${search}%` } },
-      ];
+      whereClause[Op.or] = [{ feePerHour: { [Op.like]: `%${search}%` } }];
     }
 
     const data = await FeeStructure.findAll({
@@ -148,18 +148,33 @@ exports.deleteFeeStructure = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const deleted = await FeeStructure.destroy({ where: { id } });
+    logger.info("Soft deleting fee structure", { id });
 
-    if (!deleted) {
+    const feeStructure = await FeeStructure.findOne({
+      where: {
+        id,
+        isDeleted: false,
+      },
+    });
+
+    if (!feeStructure) {
       logger.warn(`Fee structure not found for delete: ${id}`);
       return res.status(404).json({ message: "Record not found" });
     }
 
-    logger.info(`Fee structure deleted`, { id });
+    await feeStructure.update({
+      isDeleted: true,
+      updatedBy: req.user?.id || null, // ✅ audit (optional)
+    });
 
-    res.json({ message: "Deleted successfully" });
+    logger.info("Fee structure soft deleted", { id });
+
+    res.json({
+      success: true,
+      message: "Deleted successfully",
+    });
   } catch (err) {
-    logger.error("Error deleting fee structure", err);
+    logger.error("Error soft deleting fee structure", err);
     res.status(500).json({ message: "Failed to delete record" });
   }
 };

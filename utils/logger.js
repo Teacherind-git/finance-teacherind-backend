@@ -1,9 +1,12 @@
 const { createLogger, format, transports } = require("winston");
 const path = require("path");
 
-const logFormat = format.printf(({ level, message, timestamp, stack }) => {
-  return `${timestamp} [${level}]: ${stack || message}`;
-});
+const logFormat = format.printf(
+  ({ level, message, timestamp, stack, ...meta }) => {
+    const metaString = Object.keys(meta).length ? JSON.stringify(meta) : "";
+    return `${timestamp} [${level}]: ${stack || message} ${metaString}`;
+  }
+);
 
 const logger = createLogger({
   level: "info",
@@ -16,10 +19,7 @@ const logger = createLogger({
   transports: [
     // 🔹 Console logs
     new transports.Console({
-      format: format.combine(
-        format.colorize(),
-        logFormat
-      ),
+      format: format.combine(format.colorize(), logFormat),
     }),
 
     // 🔹 Error logs

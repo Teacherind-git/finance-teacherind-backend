@@ -1,17 +1,17 @@
 require("dotenv").config({
   path: "/home/trivand/Thanseem/Payroll System/payroll-backend/.env",
 });
-const moment = require("moment");
+const moment = require("moment-timezone");
 const { Op } = require("sequelize");
 
 const StudentBill = require("../../models/primary/StudentBill");
 const logger = require("../../utils/logger"); // ✅ path as needed
 
 async function updateBillStatus() {
-  const today = moment().startOf("day");
+  const today = moment().tz("Asia/Kolkata").toDate();
 
   logger.info("Bill status update job started", {
-    date: today.format("YYYY-MM-DD"),
+    date: today,
   });
 
   try {
@@ -19,7 +19,7 @@ async function updateBillStatus() {
     const overdueBills = await StudentBill.findAll({
       where: {
         status: "Generated",
-        dueDate: { [Op.lt]: today.toDate() },
+        dueDate: { [Op.lte]: today },
       },
     });
 
@@ -41,7 +41,7 @@ async function updateBillStatus() {
     const finalOverdueBills = await StudentBill.findAll({
       where: {
         status: { [Op.ne]: "Paid" },
-        finalDueDate: { [Op.lt]: today.toDate() },
+        finalDueDate: { [Op.lte]: today },
       },
     });
 

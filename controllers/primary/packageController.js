@@ -6,7 +6,10 @@ exports.getAll = async (req, res) => {
   try {
     logger.info("Fetching all packages");
 
-    const packages = await Package.findAll();
+    const packages = await Package.findAll({
+      where: { isDeleted: false }, // ✅ exclude soft-deleted
+      order: [["createdAt", "DESC"]],
+    });
 
     logger.info(`Packages fetched: ${packages.length}`);
 
@@ -108,21 +111,33 @@ exports.delete = async (req, res) => {
   try {
     const { id } = req.params;
 
-    logger.info(`Deleting package: ${id}`);
+    logger.info(`Soft deleting package: ${id}`);
 
-    const pkg = await Package.findByPk(id);
+    const pkg = await Package.findOne({
+      where: {
+        id,
+        isDeleted: false,
+      },
+    });
+
     if (!pkg) {
       logger.warn(`Package not found for delete: ${id}`);
       return res.status(404).json({ message: "Package not found" });
     }
 
-    await pkg.destroy();
+    await pkg.update({
+      isDeleted: true,
+      updatedBy: req.user?.id || null, // ✅ optional audit
+    });
 
-    logger.info(`Package deleted: ${id}`);
+    logger.info(`Package soft deleted: ${id}`);
 
-    res.json({ message: "Package deleted successfully" });
+    res.json({
+      success: true,
+      message: "Package deleted successfully",
+    });
   } catch (error) {
-    logger.error("Error deleting package", error);
+    logger.error("Error soft deleting package", error);
     res.status(400).json({ message: "Failed to delete package" });
   }
 };

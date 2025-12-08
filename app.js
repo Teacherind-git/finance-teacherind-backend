@@ -17,6 +17,9 @@ const packageRoutes = require("./routes/primary/packageRoutes");
 const tutorPayRuleRoutes = require("./routes/primary/tutorPayRule");
 const studentRoutes = require("./routes/primary/studentRoutes");
 const staffRoutes = require("./routes/primary/staffRoutes");
+const staffPayrollRoutes = require("./routes/primary/staffPayrollRoutes");
+const tutorPayrollRoutes = require("./routes/primary/tutorPayrollRoutes");
+const councilorPayrollRoutes = require("./routes/primary/councilorPayrollRoutes");
 
 dotenv.config();
 connectDBs();
@@ -50,6 +53,9 @@ app.use("/api/packages", packageRoutes);
 app.use("/api/tutor-pay", tutorPayRuleRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/staff", staffRoutes);
+app.use("/api/staff-payroll", staffPayrollRoutes);
+app.use("/api/tutor-payroll", tutorPayrollRoutes);
+app.use("/api/councilor-payroll", councilorPayrollRoutes);
 
 /* ✅ Error handler (ALWAYS LAST) */
 app.use(errorHandler);

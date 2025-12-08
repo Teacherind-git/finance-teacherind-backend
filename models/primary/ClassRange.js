@@ -24,6 +24,12 @@ const ClassRange = sequelizePrimary.define(
       allowNull: false,
     },
 
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: true,

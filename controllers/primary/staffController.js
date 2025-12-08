@@ -5,6 +5,7 @@ const Staff = require("../../models/primary/Staff");
 const StaffDocument = require("../../models/primary/StaffDocument");
 const User = require("../../models/primary/User");
 const Role = require("../../models/primary/Role");
+const StaffPayroll = require("../../models/primary/StaffPayroll");
 const logger = require("../../utils/logger");
 
 /* ================= CREATE STAFF (STEP 1) ================= */
@@ -17,6 +18,7 @@ exports.createStaff = async (req, res) => {
       createdBy: req.user.id,
     });
 
+    // ✅ Check existing user
     const existingUser = await User.findOne({
       where: { email: data.email },
     });
@@ -26,23 +28,38 @@ exports.createStaff = async (req, res) => {
       hashedPassword = await bcrypt.hash(data.password, 10);
     }
 
+    // ✅ Profile photo upload
     if (req.files?.profilePhoto) {
       data.profilePhoto = `/uploads/profile/${req.files.profilePhoto[0].filename}`;
     }
 
-    data.bankDetails = data.bankDetails
-      ? JSON.parse(data.bankDetails)
-      : null;
+    // ✅ Parse bank details
+    data.bankDetails = data.bankDetails ? JSON.parse(data.bankDetails) : null;
 
     data.createdBy = req.user.id;
 
+    // ✅ Create staff
     const staff = await Staff.create(data);
+
+    // ✅ Create default payroll immediately
+    await StaffPayroll.findOrCreate({
+      where: {
+        staffId: staff.id,
+      },
+      defaults: {
+        createdBy: req.user.id,
+      },
+    });
 
     let user = null;
 
+    // ✅ Create user if not existing
     if (!existingUser) {
       const roleName = data.roleName || "Staff";
-      const role = await Role.findOne({ where: { name: roleName } });
+
+      const role = await Role.findOne({
+        where: { name: roleName },
+      });
 
       if (!role) {
         logger.warn(`Invalid role during staff creation: ${roleName}`);
@@ -180,6 +197,9 @@ exports.getAllStaff = async (req, res) => {
     logger.info("Fetching all staff");
 
     const staffList = await Staff.findAll({
+      where: {
+        isDeleted: false, // ✅ exclude deleted staff
+      },
       include: [{ model: StaffDocument, as: "documents" }],
       order: [["createdAt", "DESC"]],
     });
@@ -189,6 +209,7 @@ exports.getAllStaff = async (req, res) => {
     const newUsers = await User.findAll({
       where: {
         roleId: 3,
+        isDeleted: false, // ✅ exclude deleted users
         email: { [Op.notIn]: staffEmails },
       },
       include: [
@@ -207,7 +228,7 @@ exports.getAllStaff = async (req, res) => {
         "updatedAt",
         "department",
         "position",
-        "isActive",
+        "status",
         "createdBy",
       ],
     });
@@ -218,7 +239,10 @@ exports.getAllStaff = async (req, res) => {
     ].filter(Boolean);
 
     const creators = await User.findAll({
-      where: { id: { [Op.in]: createdByIds } },
+      where: {
+        id: { [Op.in]: createdByIds },
+        isDeleted: false, // ✅ safety
+      },
       attributes: ["id", "firstName", "lastName"],
     });
 
@@ -229,9 +253,7 @@ exports.getAllStaff = async (req, res) => {
 
     const formattedStaff = staffList.map((s) => ({
       ...s.toJSON(),
-      createdBy: s.createdBy
-        ? creatorMap[s.createdBy] || "Unknown"
-        : null,
+      createdBy: s.createdBy ? creatorMap[s.createdBy] || "Unknown" : null,
     }));
 
     const formattedUsers = newUsers.map((u) => ({
@@ -240,10 +262,8 @@ exports.getAllStaff = async (req, res) => {
       profilePhoto: "",
       roleName: u.role?.name || "",
       documents: [],
-      status: u.isActive ? "Active" : "Inactive",
-      createdBy: u.createdBy
-        ? creatorMap[u.createdBy] || "Unknown"
-        : null,
+      status: u.status ? "Active" : "Inactive",
+      createdBy: u.createdBy ? creatorMap[u.createdBy] || "Unknown" : null,
     }));
 
     const combinedList = [...formattedStaff, ...formattedUsers];
@@ -262,28 +282,40 @@ exports.getAllStaff = async (req, res) => {
 
 /* ================= DELETE STAFF ================= */
 exports.deleteStaff = async (req, res) => {
-  const staff = await Staff.findByPk(req.params.id, {
-    include: ["documents"],
-  });
+  try {
+    logger.info("Soft deleting staff", {
+      staffId: req.params.id,
+      deletedBy: req.user?.id,
+    });
 
-  if (!staff) {
-    logger.warn(`Staff not found for delete: ${req.params.id}`);
-    return res.status(404).json({ message: "Not found" });
+    const staff = await Staff.findOne({
+      where: {
+        id: req.params.id,
+        isDeleted: false,
+      },
+      include: ["documents"],
+    });
+
+    if (!staff) {
+      logger.warn(`Staff not found for delete: ${req.params.id}`);
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await staff.update({
+      isDeleted: true,
+      isActive: false, // ✅ optional (if exists)
+      updatedBy: req.user?.id || null,
+    });
+
+    logger.info("Staff soft deleted", {
+      staffId: staff.id,
+    });
+
+    res.json({ success: true, message: "Staff deleted successfully" });
+  } catch (error) {
+    logger.error("Error soft deleting staff", error);
+    res.status(500).json({ message: "Failed to delete staff" });
   }
-
-  if (staff.profilePhoto) {
-    fs.unlinkSync(`public${staff.profilePhoto}`);
-  }
-
-  staff.documents.forEach((doc) => {
-    fs.unlinkSync(`public${doc.filePath}`);
-  });
-
-  await staff.destroy();
-
-  logger.info("Staff deleted", { staffId: staff.id });
-
-  res.json({ success: true });
 };
 
 /* ================= DELETE DOCUMENT ================= */

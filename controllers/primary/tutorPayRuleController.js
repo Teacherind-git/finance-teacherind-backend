@@ -105,21 +105,33 @@ exports.deleteBasePay = async (req, res) => {
   try {
     const { id } = req.params;
 
-    logger.info("Deleting base pay", { basePayId: id });
+    logger.info("Soft deleting base pay", { basePayId: id });
 
-    const basePay = await BasePay.findByPk(id);
+    const basePay = await BasePay.findOne({
+      where: {
+        id,
+        isDeleted: false,
+      },
+    });
+
     if (!basePay) {
       logger.warn(`Base pay not found for delete: ${id}`);
       return res.status(404).json({ message: "Base pay not found" });
     }
 
-    await basePay.destroy();
+    await basePay.update({
+      isDeleted: true,
+      updatedBy: req.user?.id || null, // ✅ optional audit
+    });
 
-    logger.info("Base pay deleted", { basePayId: id });
+    logger.info("Base pay soft deleted", { basePayId: id });
 
-    res.json({ message: "Base pay deleted" });
+    res.json({
+      success: true,
+      message: "Base pay deleted successfully",
+    });
   } catch (error) {
-    logger.error("Error deleting base pay", error);
+    logger.error("Error soft deleting base pay", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -129,6 +141,7 @@ exports.getAllBasePays = async (req, res) => {
     logger.info("Fetching all base pays");
 
     const basePays = await BasePay.findAll({
+      where: { isDeleted: false }, // ✅ exclude deleted
       include: [
         {
           model: ClassRange,

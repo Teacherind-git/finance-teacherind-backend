@@ -107,15 +107,6 @@ const Staff = sequelizePrimary.define(
       allowNull: true,
     },
 
-    currentSalary: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: true,
-      validate: {
-        isDecimal: true,
-        min: 0,
-      },
-    },
-
     paymentFreq: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -124,6 +115,12 @@ const Staff = sequelizePrimary.define(
     bankDetails: {
       type: DataTypes.JSON,
       allowNull: true,
+    },
+
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
 
     createdBy: {

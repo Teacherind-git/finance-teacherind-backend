@@ -80,6 +80,7 @@ exports.getAllStudents = async (req, res) => {
           ],
         },
       ],
+      where: { isDeleted: false },
     });
 
     logger.info(`Students fetched: ${students.length}`);
@@ -182,33 +183,44 @@ exports.updateStudent = async (req, res) => {
 exports.deleteStudent = async (req, res) => {
   const t = await sequelizePrimary.transaction();
   try {
-    logger.info("Deleting student", { studentId: req.params.id });
+    logger.info("Soft deleting student", {
+      studentId: req.params.id,
+    });
 
-    const student = await Student.findByPk(req.params.id);
+    const student = await Student.findOne({
+      where: { id: req.params.id, isDeleted: false },
+      transaction: t,
+    });
+
     if (!student) {
-      logger.warn(`Student not found for delete: ${req.params.id}`);
+      await t.rollback();
       return res
         .status(404)
         .json({ success: false, message: "Student not found" });
     }
 
-    await StudentDetail.destroy({
-      where: { studentId: student.id },
-      transaction: t,
-    });
-
-    await student.destroy({ transaction: t });
+    await student.update(
+      {
+        isDeleted: true,
+        status: "Inactive", // ✅ optional
+        updatedBy: req.user?.id || null,
+      },
+      { transaction: t }
+    );
 
     await t.commit();
 
-    logger.info("Student deleted successfully", {
+    logger.info("Student soft deleted successfully", {
       studentId: student.id,
     });
 
-    res.status(200).json({ success: true, message: "Student deleted" });
+    res.status(200).json({
+      success: true,
+      message: "Student deleted successfully",
+    });
   } catch (error) {
     await t.rollback();
-    logger.error("Error deleting student", error);
+    logger.error("Error soft deleting student", error);
     res
       .status(500)
       .json({ success: false, message: "Failed to delete student" });

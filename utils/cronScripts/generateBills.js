@@ -1,5 +1,6 @@
 require("dotenv").config({
   path: "/home/trivand/Thanseem/Payroll System/payroll-backend/.env",
+  quiet: true,
 });
 
 const moment = require("moment");
@@ -9,13 +10,26 @@ const Student = require("../../models/primary/Student");
 const StudentDetail = require("../../models/primary/StudentDetail");
 const StudentBill = require("../../models/primary/StudentBill");
 
-const logger = require("../logger"); // ✅ adjust path if needed
+const logger = require("../logger"); // ✅ logger path
+
+// ✅ Log to BOTH console + logger (cron-friendly)
+const logBoth = {
+  info: (msg, meta = {}) => {
+    logger.info(msg, meta);
+  },
+  warn: (msg, meta = {}) => {
+    logger.warn(msg, meta);
+  },
+  error: (msg, meta = {}) => {
+    logger.error(msg, meta);
+  },
+};
 
 async function generateBills() {
   const startOfToday = moment().startOf("day");
   const endOfToday = moment().endOf("day");
 
-  logger.info("Student billing job started", {
+  logBoth.info("Student billing job started", {
     date: startOfToday.format("YYYY-MM-DD"),
   });
 
@@ -35,7 +49,7 @@ async function generateBills() {
       ],
     });
 
-    logger.info("Students fetched for billing", {
+    logBoth.info("Students fetched for billing", {
       count: students.length,
     });
 
@@ -50,7 +64,7 @@ async function generateBills() {
       });
 
       if (existingBill) {
-        logger.warn("Billing skipped – already billed today", {
+        logBoth.warn("Billing skipped – already billed today", {
           studentId: student.id,
         });
         continue;
@@ -73,7 +87,7 @@ async function generateBills() {
       }
 
       if (totalAmount <= 0) {
-        logger.warn("Billing skipped – amount is zero", {
+        logBoth.warn("Billing skipped – amount is zero", {
           studentId: student.id,
         });
         continue;
@@ -98,16 +112,16 @@ async function generateBills() {
         updatedBy: 10,
       });
 
-      logger.info("Bill generated successfully", {
+      logBoth.info("Bill generated successfully", {
         studentId: student.id,
         amount: totalAmount,
       });
     }
 
-    logger.info("Student billing job completed successfully");
+    logBoth.info("Student billing job completed successfully");
     process.exit(0);
   } catch (error) {
-    logger.error("Student billing job failed", {
+    logBoth.error("Student billing job failed", {
       message: error.message,
       stack: error.stack,
     });
