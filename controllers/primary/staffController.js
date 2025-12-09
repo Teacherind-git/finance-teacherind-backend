@@ -7,6 +7,7 @@ const User = require("../../models/primary/User");
 const Role = require("../../models/primary/Role");
 const StaffPayroll = require("../../models/primary/StaffPayroll");
 const logger = require("../../utils/logger");
+const SecondaryUser = require("../../models/secondary/User");
 
 /* ================= CREATE STAFF (STEP 1) ================= */
 exports.createStaff = async (req, res) => {
@@ -273,7 +274,7 @@ exports.getAllStaff = async (req, res) => {
       newUsers: formattedUsers.length,
     });
 
-    res.status(200).json(combinedList);
+    res.status(200).json({ success: true, data: combinedList });
   } catch (error) {
     logger.error("Error fetching staff list", error);
     res.status(500).json({ message: "Failed to fetch staff" });
@@ -336,3 +337,91 @@ exports.deleteDocument = async (req, res) => {
 
   res.json({ success: true });
 };
+
+/* ================= GET ALL TUTORS ================= */
+exports.getAllTutors = async (req, res) => {
+  try {
+    logger.info("Fetching all tutors");
+
+    const tutors = await SecondaryUser.findAll({
+      where: { role: 3 }, // tutor role
+      attributes: ["id", "fullName", "email", "phone", "status"],
+      raw: true,
+    });
+
+    const formattedTutors = tutors.map((tutor) => ({
+      id: tutor.id,
+      fullName: tutor.fullName,
+      email: tutor.email,
+      phone: tutor.phone,
+      position: "Tutor",
+      department: "Teaching",
+      status: tutor.status === 1 ? "Active" : "Inactive",
+    }));
+
+    logger.info(`Fetched ${formattedTutors.length} tutors from secondary DB`, {
+      tutorCount: formattedTutors.length,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: formattedTutors,
+    });
+  } catch (error) {
+    logger.error("Error fetching tutor list", {
+      error: error.message,
+      stack: error.stack,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tutors",
+    });
+  }
+};
+
+/* ================= GET ALL COUNSELORS ================= */
+exports.getAllCounselors = async (req, res) => {
+  try {
+    logger.info("Fetching all counselors");
+
+    const counselors = await SecondaryUser.findAll({
+      where: { role: 2 }, // counselor role
+      attributes: ["id", "fullName", "email", "phone", "status"],
+      raw: true,
+    });
+
+    const formattedCounselors = counselors.map((counselor) => ({
+      id: counselor.id,
+      fullName: counselor.fullName,
+      email: counselor.email,
+      phone: counselor.phone,
+      position: "Counselor",
+      department: "Academic",
+      status: counselor.status === 1 ? "Active" : "Inactive",
+    }));
+
+    logger.info(
+      `Fetched ${formattedCounselors.length} counselors from secondary DB`,
+      {
+        counselorCount: formattedCounselors.length,
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: formattedCounselors,
+    });
+  } catch (error) {
+    logger.error("Error fetching counselor list", {
+      error: error.message,
+      stack: error.stack,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch counselors",
+    });
+  }
+};
+

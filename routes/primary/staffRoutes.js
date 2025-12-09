@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const upload = require("../../middlewares/staffUpload");
 const controller = require("../../controllers/primary/staffController");
-const { protect, authorizeRoles } = require('../../middlewares/authMiddleware');
+const { protect, authorizeRoles } = require("../../middlewares/authMiddleware");
 
 router.use(protect);
 // Create (Step-1)
@@ -30,6 +30,8 @@ router.post(
 
 // Read
 router.get("/", controller.getAllStaff);
+router.get("/tutors", controller.getAllTutors);
+router.get("/counselors", controller.getAllCounselors);
 router.get("/:id", controller.getStaff);
 
 // Delete
