@@ -6,8 +6,7 @@ const TutorPayroll = sequelizePrimary.define(
   {
     tutorId: {
       type: DataTypes.INTEGER,
-      autoIncrement: true,
-      primaryKey: true,
+      allowNull: false,
     },
 
     payrollMonth: {
@@ -76,12 +75,6 @@ const TutorPayroll = sequelizePrimary.define(
   {
     tableName: "tutor_payrolls",
     timestamps: true,
-    indexes: [
-      {
-        unique: true,
-        fields: ["tutorId", "payrollMonth"],
-      },
-    ],
   }
 );
 

@@ -19,7 +19,7 @@ const studentRoutes = require("./routes/primary/studentRoutes");
 const staffRoutes = require("./routes/primary/staffRoutes");
 const staffPayrollRoutes = require("./routes/primary/staffPayrollRoutes");
 const tutorPayrollRoutes = require("./routes/primary/tutorPayrollRoutes");
-const councilorPayrollRoutes = require("./routes/primary/councilorPayrollRoutes");
+const counselorPayrollRoutes = require("./routes/primary/counselorPayrollRoutes");
 
 dotenv.config();
 connectDBs();
@@ -55,7 +55,7 @@ app.use("/api/students", studentRoutes);
 app.use("/api/staff", staffRoutes);
 app.use("/api/staff-payroll", staffPayrollRoutes);
 app.use("/api/tutor-payroll", tutorPayrollRoutes);
-app.use("/api/councilor-payroll", councilorPayrollRoutes);
+app.use("/api/counselor-payroll", counselorPayrollRoutes);
 
 /* ✅ Error handler (ALWAYS LAST) */
 app.use(errorHandler);

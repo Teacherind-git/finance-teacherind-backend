@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const payrollController = require("../../controllers/primary/councilorPayrollController");
+const payrollController = require("../../controllers/primary/counselorPayrollController");
 const { protect, authorizeRoles } = require('../../middlewares/authMiddleware');
 
 router.use(protect);
@@ -16,7 +16,7 @@ router.post(
 router.get(
   "/",
   authorizeRoles("SuperAdmin", "Admin", "User"),
-  payrollController.getCouncilorPayrollList
+  payrollController.getCounselorPayrollList
 );
 
 module.exports = router;

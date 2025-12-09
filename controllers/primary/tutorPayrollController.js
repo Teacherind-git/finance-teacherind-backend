@@ -25,13 +25,14 @@ exports.getTutorsPayrollList = async (req, res) => {
     // Convert payrolls to map for quick lookup
     const payrollMap = {};
     payrolls.forEach((p) => {
-      payrollMap[p.councilorId] = p;
+      payrollMap[p.tutorId] = p;
     });
 
     // 3️⃣ Build response
     const result = tutors.map((tutor) => {
       const payroll = payrollMap[tutor.id];
       return {
+        id: payroll?.id,
         tutorId: tutor.id,
         fullName: tutor.fullname,
         baseSalary: payroll?.baseSalary ?? 0,
@@ -40,6 +41,7 @@ exports.getTutorsPayrollList = async (req, res) => {
         totalDeductions: payroll?.totalDeductions ?? 0,
         netSalary: payroll?.netSalary ?? 0,
         payrollExists: !!payroll,
+        payrollMonth: payroll?.payrollMonth
       };
     });
 
@@ -59,15 +61,16 @@ exports.getTutorsPayrollList = async (req, res) => {
 
 exports.createOrUpdatePayroll = async (req, res) => {
   const payload = req.body;
+
   logger.info(
-    `Saving payroll for tutorId: ${payload.councilorId}, month: ${payload.payrollMonth}`,
+    `Saving payroll for tutorId: ${payload.tutorId}, month: ${payload.payrollMonth}`,
     { payload }
   );
 
   try {
     const [payroll, created] = await TutorPayroll.upsert(
       {
-        councilorId: payload.councilorId,
+        tutorId: payload.tutorId,              // ✅ FIX
         payrollMonth: payload.payrollMonth,
         baseSalary: payload.baseSalary,
         grossSalary: payload.grossSalary,
@@ -76,15 +79,14 @@ exports.createOrUpdatePayroll = async (req, res) => {
         deductions: payload.deductions || [],
         totalDeductions: payload.totalDeductions || 0,
         netSalary: payload.netSalary,
+        createdBy: payload.userId,
         updatedBy: payload.userId,
       },
       { returning: true }
     );
 
     logger.info(
-      `Payroll ${created ? "created" : "updated"} successfully for tutorId: ${
-        payload.councilorId
-      }`,
+      `Payroll ${created ? "created" : "updated"} for tutorId: ${payload.tutorId}`,
       { payroll }
     );
 
@@ -95,9 +97,10 @@ exports.createOrUpdatePayroll = async (req, res) => {
     });
   } catch (err) {
     logger.error(
-      `Failed to save payroll for tutorId: ${payload.councilorId} - ${err.message}`,
-      { stack: err.stack, payload }
+      `Failed payroll save for tutorId: ${payload.tutorId}`,
+      { error: err.message, stack: err.stack }
     );
     res.status(500).json({ success: false, message: "Payroll save failed" });
   }
 };
+

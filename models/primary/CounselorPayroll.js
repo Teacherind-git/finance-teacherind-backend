@@ -1,13 +1,12 @@
 const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
 
-const CouncilorPayroll = sequelizePrimary.define(
-  "councilor_payroll",
+const CounselorPayroll = sequelizePrimary.define(
+  "counselor_payroll",
   {
-    councilorId: {
+    counselorId: {
       type: DataTypes.INTEGER,
-      autoIncrement: true,
-      primaryKey: true,
+      allowNull: false,
     },
 
     payrollMonth: {
@@ -74,15 +73,9 @@ const CouncilorPayroll = sequelizePrimary.define(
     },
   },
   {
-    tableName: "councilor_payrolls",
+    tableName: "counselor_payrolls",
     timestamps: true,
-    indexes: [
-      {
-        unique: true,
-        fields: ["councilorId", "payrollMonth"],
-      },
-    ],
   }
 );
 
-module.exports = CouncilorPayroll;
+module.exports = CounselorPayroll;

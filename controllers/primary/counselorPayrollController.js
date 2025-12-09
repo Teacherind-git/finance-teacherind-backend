@@ -1,43 +1,44 @@
 const User = require("../../models/secondary/User");
-const CouncilorPayroll = require("../../models/primary/CouncilorPayroll");
+const counselorPayroll = require("../../models/primary/CounselorPayroll");
 const logger = require("../../utils/logger");
 
 /**
- * GET councilor payroll list (default values if payroll not created)
+ * GET counselor payroll list (default values if payroll not created)
  */
-exports.getCouncilorPayrollList = async (req, res) => {
-  logger.info("Fetching councilor payroll list");
+exports.getCounselorPayrollList = async (req, res) => {
+  logger.info("Fetching counselor payroll list");
 
   try {
-    // ✅ councilors from secondary DB
-    const councilors = await User.findAll({
+    // ✅ counselors from secondary DB
+    const counselors = await User.findAll({
       where: {
-        role: 2,        // ✅ councilor role
+        role: 2, // ✅ counselor role
         status: 1,
       },
       attributes: ["id", "fullname"],
       raw: true,
     });
 
-    logger.info(`Fetched ${councilors.length} councilors`);
+    logger.info(`Fetched ${counselors.length} counselors`);
 
     // ✅ payrolls from primary DB
-    const payrolls = await CouncilorPayroll.findAll({
+    const payrolls = await counselorPayroll.findAll({
       where: { isDeleted: false },
       raw: true,
     });
 
     const payrollMap = {};
     payrolls.forEach((p) => {
-      payrollMap[p.councilorId] = p;
+      payrollMap[p.counselorId] = p;
     });
 
     // ✅ unify response
-    const result = councilors.map((c) => {
+    const result = counselors.map((c) => {
       const payroll = payrollMap[c.id];
 
       return {
-        councilorId: c.id,
+        id: payroll?.id,
+        counselorId: c.id,
         fullName: c.fullname,
 
         baseSalary: payroll?.baseSalary ?? 0,
@@ -45,6 +46,7 @@ exports.getCouncilorPayrollList = async (req, res) => {
         totalEarnings: payroll?.totalEarnings ?? 0,
         totalDeductions: payroll?.totalDeductions ?? 0,
         netSalary: payroll?.netSalary ?? 0,
+        payrollMonth: payroll?.payrollMonth,
 
         payrollExists: Boolean(payroll),
       };
@@ -52,32 +54,32 @@ exports.getCouncilorPayrollList = async (req, res) => {
 
     res.json({ success: true, data: result });
   } catch (err) {
-    logger.error("Failed to fetch councilor payroll list", {
+    logger.error("Failed to fetch counselor payroll list", {
       error: err.message,
       stack: err.stack,
     });
 
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch councilor payroll list" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch counselor payroll list",
+    });
   }
 };
 
 /**
- * CREATE / UPDATE councilor payroll
+ * CREATE / UPDATE counselor payroll
  */
 exports.createOrUpdatePayroll = async (req, res) => {
   const payload = req.body;
 
-  logger.info("Saving councilor payroll", {
-    councilorId: payload.councilorId,
-    payrollMonth: payload.payrollMonth,
+  logger.info("Saving counselor payroll", {
+    counselorId: payload.counselorId,
   });
 
   try {
-    const [payroll, created] = await CouncilorPayroll.upsert(
+    const [payroll, created] = await counselorPayroll.upsert(
       {
-        councilorId: payload.councilorId,
+        counselorId: payload.counselorId,
         payrollMonth: payload.payrollMonth,
 
         baseSalary: payload.baseSalary,
@@ -95,10 +97,9 @@ exports.createOrUpdatePayroll = async (req, res) => {
       { returning: true }
     );
 
-    logger.info(
-      `Councilor payroll ${created ? "created" : "updated"}`,
-      { councilorId: payload.councilorId }
-    );
+    logger.info(`counselor payroll ${created ? "created" : "updated"}`, {
+      counselorId: payload.counselorId,
+    });
 
     res.json({
       success: true,
@@ -106,14 +107,12 @@ exports.createOrUpdatePayroll = async (req, res) => {
       data: payroll,
     });
   } catch (err) {
-    logger.error("Councilor payroll save failed", {
+    logger.error("counselor payroll save failed", {
       error: err.message,
       stack: err.stack,
       payload,
     });
 
-    res
-      .status(500)
-      .json({ success: false, message: "Payroll save failed" });
+    res.status(500).json({ success: false, message: "Payroll save failed" });
   }
 };
