@@ -1,6 +1,7 @@
 const router = require("express").Router();
 const upload = require("../../middlewares/staffUpload");
 const controller = require("../../controllers/primary/staffController");
+const salaryController = require("../../controllers/primary/staffSalaryController");
 const { protect, authorizeRoles } = require("../../middlewares/authMiddleware");
 
 router.use(protect);
@@ -19,6 +20,9 @@ router.put(
   upload.none(),
   controller.updateStaff
 );
+router.put("/approve/:id", salaryController.approveSalary);
+router.put("/reject/:id", salaryController.rejectSalary);
+router.put("/update-status/:id", salaryController.updateSalaryStatus);
 
 // Upload documents (Step-3)
 router.post(
@@ -32,6 +36,7 @@ router.post(
 router.get("/", controller.getAllStaff);
 router.get("/tutors", controller.getAllTutors);
 router.get("/counselors", controller.getAllCounselors);
+router.get("/salary", salaryController.getAllSalaries);
 router.get("/:id", controller.getStaff);
 
 // Delete

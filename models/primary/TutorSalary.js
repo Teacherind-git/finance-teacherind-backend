@@ -1,24 +1,46 @@
 const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
-const Student = require("./Student");
 
-const StudentBill = sequelizePrimary.define(
-  "student_bill",
+const TutorSalary = sequelizePrimary.define(
+  "tutor_salary",
   {
-    studentId: { type: DataTypes.INTEGER, allowNull: false },
+    payrollId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    payrollMonth: {
+      type: DataTypes.DATE,
+      allowNull: false,
+    },
+    tutorId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    type: {
+      type: DataTypes.ENUM("TUTOR"),
+      allowNull: false,
+    },
     amount: { type: DataTypes.FLOAT, allowNull: false },
-    billDate: { type: DataTypes.DATE, allowNull: false },
+    salaryDate: { type: DataTypes.DATE, allowNull: false },
     dueDate: { type: DataTypes.DATE, allowNull: false },
     finalDueDate: { type: DataTypes.DATE, allowNull: false },
     status: {
       type: DataTypes.STRING,
-      defaultValue: "Generated",
+      defaultValue: "Pending",
       allowNull: false,
     },
     isDeleted: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
+    },
+    approvedBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "users",
+        key: "id",
+      },
     },
     createdBy: {
       type: DataTypes.INTEGER,
@@ -28,7 +50,6 @@ const StudentBill = sequelizePrimary.define(
         key: "id",
       },
     },
-
     updatedBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
@@ -39,18 +60,9 @@ const StudentBill = sequelizePrimary.define(
     },
   },
   {
-    tableName: "student_bills", // 👈 Force exact table name
+    tableName: "tutor_salary", // 👈 Force exact table name
     timestamps: true,
   }
 );
 
-// Relations
-Student.hasMany(StudentBill, {
-  foreignKey: "studentId",
-});
-
-StudentBill.belongsTo(Student, {
-  foreignKey: "studentId",
-});
-
-module.exports = StudentBill;
+module.exports = TutorSalary;
