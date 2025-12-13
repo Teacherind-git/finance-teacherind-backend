@@ -95,7 +95,6 @@ exports.login = async (req, res) => {
     logger.info(`Login attempt for email: ${email}`);
 
     if (!email || !password) {
-      logger.warn("Login failed: Email or password missing");
       return res.status(400).json({
         success: false,
         message: "Email and password are required",
@@ -108,17 +107,35 @@ exports.login = async (req, res) => {
     });
 
     if (!user) {
-      logger.warn(`Login failed: User not found (${email})`);
       return res.status(404).json({
         success: false,
         message: "Invalid email or password",
       });
     }
 
+    // 🔒 CHECK: isDeleted
+    if (user.isDeleted) {
+      logger.warn(`Login blocked (deleted user): ${email}`);
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_DELETED",
+        message: "Your account has been deleted. Please contact administrator.",
+      });
+    }
+
+    // 🔒 CHECK: status
+    if (user.status === "Inactive") {
+      logger.warn(`Login blocked (inactive user): ${email}`);
+      return res.status(403).json({
+        success: false,
+        code: "ACCOUNT_INACTIVE",
+        message: "Your account is inactive. Please contact administrator.",
+      });
+    }
+
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
-      logger.warn(`Login failed: Wrong password (${email})`);
-      return res.status(404).json({
+      return res.status(401).json({
         success: false,
         message: "Invalid email or password",
       });

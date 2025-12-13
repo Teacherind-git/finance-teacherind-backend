@@ -72,13 +72,22 @@ exports.getAllPayrolls = async (req, res) => {
         },
       ],
       order: [["createdAt", "DESC"]],
+      raw: false, // keep nested Staff object
+      nest: true,
     });
 
     logger.info("Payrolls fetched successfully", {
       count: payrolls.length,
     });
 
-    res.json({ data: payrolls });
+    // ✅ sort: netSalary = 0 first
+    const sortedPayrolls = payrolls.sort((a, b) => {
+      if (a.netSalary === 0 && b.netSalary !== 0) return -1;
+      if (a.netSalary !== 0 && b.netSalary === 0) return 1;
+      return 0; // keep relative order otherwise
+    });
+
+    res.json({ data: sortedPayrolls });
   } catch (error) {
     logger.error("Error fetching payrolls", {
       error: error.message,

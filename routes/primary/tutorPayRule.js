@@ -6,7 +6,11 @@ const { protect, authorizeRoles } = require("../../middlewares/authMiddleware");
 router.use(protect);
 // PAY RULE
 router.post("/payrule", authorizeRoles("SuperAdmin"), controller.savePayRule);
-router.get("/payrule", authorizeRoles("SuperAdmin"), controller.getPayRuleData);
+router.get(
+  "/payrule",
+  authorizeRoles("SuperAdmin", "Admin"),
+  controller.getPayRuleData
+);
 
 // BASE PAY
 router.post("/basepay", authorizeRoles("SuperAdmin"), controller.createBasePay);
@@ -20,6 +24,6 @@ router.delete(
   authorizeRoles("SuperAdmin"),
   controller.deleteBasePay
 );
-router.get("/basepay", authorizeRoles("SuperAdmin"), controller.getAllBasePays);
+router.get("/basepay", authorizeRoles("SuperAdmin", "Admin"), controller.getAllBasePays);
 
 module.exports = router;

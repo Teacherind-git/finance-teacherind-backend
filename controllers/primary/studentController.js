@@ -5,6 +5,7 @@ const Package = require("../../models/primary/Package");
 const ClassRange = require("../../models/primary/ClassRange");
 const { sequelizePrimary } = require("../../config/db");
 const logger = require("../../utils/logger");
+const axios = require("axios");
 
 /* ================= CREATE STUDENT ================= */
 exports.createStudent = async (req, res) => {
@@ -19,6 +20,9 @@ exports.createStudent = async (req, res) => {
       detailsCount: details?.length,
     });
 
+    // -----------------------------
+    // 1. Create student
+    // -----------------------------
     const student = await Student.create(
       { name, contact, createdBy: userId },
       { transaction: t }
@@ -31,17 +35,53 @@ exports.createStudent = async (req, res) => {
 
     await StudentDetail.bulkCreate(detailsToCreate, { transaction: t });
 
+    // -----------------------------
+    // 2. Commit DB changes
+    // -----------------------------
     await t.commit();
 
+    // -----------------------------
+    // 3. Fetch final student with details
+    // -----------------------------
     const created = await Student.findByPk(student.id, {
       include: { model: StudentDetail, as: "details" },
     });
 
-    logger.info("Student created successfully", {
-      studentId: student.id,
-    });
+    // -----------------------------
+    // 4. Call external API
+    // -----------------------------
+    try {
+      const payload = {
+        email: contact, // Or student.email
+        fullname: name,
+        phone: contact,
+      };
 
-    res.status(201).json({ success: true, student: created });
+      const externalResponse = await axios.post(
+        "https://ai.teacherind.com/api/add-student",
+        payload
+      );
+
+      logger.info("External student created", {
+        studentId: student.id,
+        apiResponse: externalResponse.data,
+      });
+    } catch (apiError) {
+      logger.error("External API student creation failed", {
+        studentId: student.id,
+        error: apiError.response?.data || apiError.message,
+      });
+      // ⚠ Do NOT fail main response — student saved already
+    }
+
+    // -----------------------------
+    // 5. Send final response
+    // -----------------------------
+    res.status(201).json({
+      success: true,
+      student: created,
+      externalApiStatus: "Triggered",
+    });
   } catch (error) {
     await t.rollback();
     logger.error("Error creating student", error);
@@ -54,9 +94,24 @@ exports.createStudent = async (req, res) => {
 /* ================= GET ALL STUDENTS ================= */
 exports.getAllStudents = async (req, res) => {
   try {
-    logger.info("Fetching all students");
+    const {
+      page = 1,
+      limit = 10,
+      sortBy = "createdAt",
+      sortOrder = "DESC",
+    } = req.query;
 
-    const students = await Student.findAll({
+    const offset = (Number(page) - 1) * Number(limit);
+
+    logger.info("Fetching students with pagination & sorting", {
+      page,
+      limit,
+      sortBy,
+      sortOrder,
+    });
+
+    const { rows: students, count } = await Student.findAndCountAll({
+      where: { isDeleted: false },
       include: [
         {
           model: StudentDetail,
@@ -80,12 +135,26 @@ exports.getAllStudents = async (req, res) => {
           ],
         },
       ],
-      where: { isDeleted: false },
+      limit: Number(limit),
+      offset,
+      order: [[sortBy, sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC"]],
+      distinct: true, // ✅ important when using include
     });
 
     logger.info(`Students fetched: ${students.length}`);
 
-    res.status(200).json({ success: true, students });
+    res.status(200).json({
+      success: true,
+      data: students,
+      pagination: {
+        totalRecords: count,
+        currentPage: Number(page),
+        pageSize: Number(limit),
+        totalPages: Math.ceil(count / limit),
+        sortBy,
+        sortOrder,
+      },
+    });
   } catch (error) {
     logger.error("Error fetching students", error);
     res.status(500).json({

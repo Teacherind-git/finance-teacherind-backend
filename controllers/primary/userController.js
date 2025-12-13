@@ -8,10 +8,23 @@ exports.getAllUsers = async (req, res) => {
   try {
     const { type } = req.query;
 
+    /* ---------- Pagination & Sorting Defaults ---------- */
+    const page = parseInt(req.query.page, 10) || 1;
+    const pageSize = parseInt(req.query.pageSize, 10) || 10;
+    const sortBy = req.query.sortBy || "updatedAt";
+    const sortOrder = req.query.sortOrder === "ASC" ? "ASC" : "DESC";
+
+    const offset = (page - 1) * pageSize;
+    const limit = pageSize;
+
     logger.info("Fetching users", {
       requestedBy: req.user.id,
       role: req.user.role?.name,
       type,
+      page,
+      pageSize,
+      sortBy,
+      sortOrder,
     });
 
     const commonInclude = [
@@ -28,31 +41,34 @@ exports.getAllUsers = async (req, res) => {
       },
     ];
 
-    let whereCondition = {};
+    let whereCondition = { isDeleted: false };
 
     /* ---------- Normal User ---------- */
     if (req.user.role.name === "User") {
-      whereCondition = { createdBy: req.user.id, isDeleted: false };
+      whereCondition.createdBy = req.user.id;
     }
 
     /* ---------- SuperAdmin ---------- */
     if (req.user.role.name === "SuperAdmin") {
       if (type === "SuperAdmin") {
-        whereCondition = { createdBy: req.user.id, isDeleted: false };
+        whereCondition.createdBy = req.user.id;
       } else if (type === "Others") {
-        whereCondition = {
-          createdBy: { [Op.ne]: req.user.id },
-          isDeleted: false,
-        };
+        whereCondition.createdBy = { [Op.ne]: req.user.id };
       }
     }
 
-    const users = await User.findAll({
+    /* ---------- Fetch with Pagination ---------- */
+    const { rows: users, count: totalRecords } = await User.findAndCountAll({
       where: whereCondition,
       attributes: { exclude: ["password"] },
       include: commonInclude,
-      order: [["id", "ASC"]],
+      order: [[sortBy, sortOrder]],
+      limit,
+      offset,
+      distinct: true, // IMPORTANT when using include
     });
+
+    const totalPages = Math.ceil(totalRecords / pageSize);
 
     const usersWithCreatorName = users.map((u) => {
       const json = u.toJSON();
@@ -67,6 +83,14 @@ exports.getAllUsers = async (req, res) => {
     res.status(200).json({
       success: true,
       users: usersWithCreatorName,
+      pagination: {
+        currentPage: page,
+        pageSize,
+        totalRecords,
+        totalPages,
+        sortBy,
+        sortOrder,
+      },
     });
   } catch (error) {
     logger.error("Error fetching users", error);
@@ -147,6 +171,7 @@ exports.updateUser = async (req, res) => {
       phone,
       taxId,
       address,
+      status
     } = req.body;
 
     logger.info("Updating user", {
@@ -178,6 +203,7 @@ exports.updateUser = async (req, res) => {
     user.position = position ?? user.position;
     user.phone = phone ?? user.phone;
     user.taxId = taxId ?? user.taxId;
+     user.status = status ?? user.taxId;
 
     if (address) {
       user.address = { ...user.address, ...address };

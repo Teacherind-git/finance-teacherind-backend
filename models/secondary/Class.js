@@ -2,7 +2,7 @@ const { DataTypes } = require("sequelize");
 const { sequelizeSecondary } = require("../../config/db");
 
 const Class = sequelizeSecondary.define(
-  "class",
+  "classes",
   {
     id: {
       type: DataTypes.BIGINT.UNSIGNED,
@@ -57,7 +57,7 @@ const Class = sequelizeSecondary.define(
     },
   },
   {
-    tableName: "class",
+    tableName: "classes",
     timestamps: false,
   }
 );

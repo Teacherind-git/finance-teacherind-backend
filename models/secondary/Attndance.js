@@ -21,7 +21,7 @@ const Attendance = sequelizeSecondary.define(
       allowNull: false,
     },
 
-    isattendancecon: {
+    isattendanceconfirmed: {
       type: DataTypes.TINYINT,
       allowNull: false,
       defaultValue: 0,
@@ -44,7 +44,7 @@ const Attendance = sequelizeSecondary.define(
     },
   },
   {
-    tableName: "attendance",
+    tableName: "attendances",
     timestamps: false, // because created_at & updated_at in DB
   }
 );

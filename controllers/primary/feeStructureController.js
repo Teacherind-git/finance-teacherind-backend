@@ -10,30 +10,51 @@ const { Op } = require("sequelize");
 // ✅ Get all Fee Structures (with filters)
 exports.getAllFeeStructures = async (req, res) => {
   try {
-    const { subject, addedBy, search } = req.query;
+    const {
+      subject,
+      addedBy,
+      search,
+      classRange,
+      page = 1,
+      limit = 10,
+      sortBy = "updatedAt",
+      sortOrder = "DESC",
+    } = req.query;
+
+    const offset = (Number(page) - 1) * Number(limit);
 
     logger.info("Fetching fee structures", {
       subject,
       addedBy,
       search,
+      classRange,
+      page,
+      limit,
+      sortBy,
+      sortOrder,
     });
 
     const whereClause = {
-      isDeleted: false, // ✅ exclude soft-deleted
+      isDeleted: false,
     };
 
     if (subject) whereClause.subjectId = subject;
     if (addedBy) whereClause.addedBy = addedBy;
+    if (classRange) whereClause.classRangeId = classRange;
 
     if (search) {
       whereClause[Op.or] = [{ feePerHour: { [Op.like]: `%${search}%` } }];
     }
 
-    const data = await FeeStructure.findAll({
+    /** ✅ Paginated query */
+    const { rows, count } = await FeeStructure.findAndCountAll({
       where: whereClause,
-      order: [["updatedAt", "DESC"]],
+      limit: Number(limit),
+      offset,
+      order: [[sortBy, sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC"]],
     });
 
+    /** ✅ Lookup data */
     const [subjects, users, class_ranges] = await Promise.all([
       Subject.findAll({ attributes: ["id", "name"] }),
       User.findAll({ attributes: ["id", "firstName", "lastName"] }),
@@ -55,7 +76,7 @@ exports.getAllFeeStructures = async (req, res) => {
       return acc;
     }, {});
 
-    const enrichedData = data.map((item) => ({
+    const enrichedData = rows.map((item) => ({
       ...item.toJSON(),
       subjectDisplay: subjectMap[item.subjectId] || "Unknown Subject",
       addedByDisplay: userMap[item.addedBy] || "Unknown User",
@@ -64,7 +85,17 @@ exports.getAllFeeStructures = async (req, res) => {
 
     logger.info(`Fee structures fetched: ${enrichedData.length}`);
 
-    res.json(enrichedData);
+    res.json({
+      data: enrichedData,
+      pagination: {
+        totalRecords: count,
+        currentPage: Number(page),
+        pageSize: Number(limit),
+        totalPages: Math.ceil(count / limit),
+        sortBy,
+        sortOrder,
+      },
+    });
   } catch (err) {
     logger.error("Error fetching fee structures", err);
     res.status(500).json({ message: "Failed to fetch fee structures" });
@@ -236,3 +267,75 @@ function calculateAverageTutorPayPercent({
 
   return Number(percent.toFixed(2));
 }
+
+exports.getAllFeeStructuresNoPagination = async (req, res) => {
+  try {
+    const { subject, addedBy, search, classRange, sortBy = "updatedAt", sortOrder = "DESC" } = req.query;
+
+    logger.info("Fetching all fee structures (no pagination)", {
+      subject,
+      addedBy,
+      search,
+      classRange,
+      sortBy,
+      sortOrder,
+    });
+
+    const whereClause = {
+      isDeleted: false,
+    };
+
+    if (subject) whereClause.subjectId = subject;
+    if (addedBy) whereClause.addedBy = addedBy;
+    if (classRange) whereClause.classRangeId = classRange;
+
+    if (search) {
+      whereClause[Op.or] = [{ feePerHour: { [Op.like]: `%${search}%` } }];
+    }
+
+    /** ✅ Fetch all matching records */
+    const feeStructures = await FeeStructure.findAll({
+      where: whereClause,
+      order: [[sortBy, sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC"]],
+    });
+
+    /** ✅ Lookup data */
+    const [subjects, users, class_ranges] = await Promise.all([
+      Subject.findAll({ attributes: ["id", "name"] }),
+      User.findAll({ attributes: ["id", "firstName", "lastName"] }),
+      ClassRange.findAll({ attributes: ["id", "label"] }),
+    ]);
+
+    const subjectMap = subjects.reduce((acc, s) => {
+      acc[s.id] = s.name;
+      return acc;
+    }, {});
+
+    const userMap = users.reduce((acc, u) => {
+      acc[u.id] = `${u.firstName}${u.lastName ? " " + u.lastName : ""}`;
+      return acc;
+    }, {});
+
+    const classRangeMap = class_ranges.reduce((acc, r) => {
+      acc[r.id] = r.label;
+      return acc;
+    }, {});
+
+    const enrichedData = feeStructures.map((item) => ({
+      ...item.toJSON(),
+      subjectDisplay: subjectMap[item.subjectId] || "Unknown Subject",
+      addedByDisplay: userMap[item.addedBy] || "Unknown User",
+      classDisplay: classRangeMap[item.classRangeId] || "Unknown Class",
+    }));
+
+    logger.info(`Fee structures fetched: ${enrichedData.length}`);
+
+    res.json({
+      data: enrichedData,
+      totalRecords: enrichedData.length,
+    });
+  } catch (err) {
+    logger.error("Error fetching fee structures (no pagination)", err);
+    res.status(500).json({ message: "Failed to fetch fee structures" });
+  }
+};

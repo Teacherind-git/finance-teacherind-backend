@@ -33,7 +33,7 @@ exports.getCounselorPayrollList = async (req, res) => {
     });
 
     // ✅ unify response
-    const result = counselors.map((c) => {
+    let result = counselors.map((c) => {
       const payroll = payrollMap[c.id];
 
       return {
@@ -52,6 +52,13 @@ exports.getCounselorPayrollList = async (req, res) => {
       };
     });
 
+    // ✅ sort: netSalary = 0 first
+    result.sort((a, b) => {
+      if (a.netSalary === 0 && b.netSalary !== 0) return -1;
+      if (a.netSalary !== 0 && b.netSalary === 0) return 1;
+      return 0; // keep relative order otherwise
+    });
+
     res.json({ success: true, data: result });
   } catch (err) {
     logger.error("Failed to fetch counselor payroll list", {
@@ -65,6 +72,7 @@ exports.getCounselorPayrollList = async (req, res) => {
     });
   }
 };
+
 
 /**
  * CREATE / UPDATE counselor payroll
