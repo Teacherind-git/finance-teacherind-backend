@@ -56,20 +56,28 @@ const CounselorPayroll = sequelizePrimary.define(
       defaultValue: 0,
     },
 
-    createdBy: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-    },
-
     isDeleted: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
       defaultValue: false,
     },
 
+    createdBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "users",
+        key: "id",
+      },
+    },
+
     updatedBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
+      references: {
+        model: "users",
+        key: "id",
+      },
     },
   },
   {
