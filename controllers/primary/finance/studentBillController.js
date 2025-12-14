@@ -1,3 +1,4 @@
+const puppeteer = require("puppeteer");
 const StudentBill = require("../../../models/primary/StudentBill");
 const Student = require("../../../models/primary/Student");
 const StudentDetail = require("../../../models/primary/StudentDetail");
@@ -5,6 +6,9 @@ const ClassRange = require("../../../models/primary/ClassRange");
 const Subject = require("../../../models/primary/Subject");
 const Package = require("../../../models/primary/Package");
 const logger = require("../../../utils/logger");
+const { getInvoiceData } = require("../../../services/invoiceService");
+const invoiceTemplate = require("../../../templates/invoiceTemplate");
+
 
 exports.getStudentBills = async (req, res) => {
   try {
@@ -75,5 +79,50 @@ exports.getStudentBills = async (req, res) => {
       success: false,
       message: "Failed to fetch student bills",
     });
+  }
+};
+
+exports.generateInvoicePdf = async (req, res) => {
+  const { studentId } = req.params;
+
+  try {
+    const invoiceData = await getInvoiceData(studentId);
+
+    if (!invoiceData) {
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    const html = invoiceTemplate(invoiceData);
+
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+
+    const pdfBuffer = await page.pdf({
+  format: "A4",
+  printBackground: true,
+  margin: {
+    top: "20mm",
+    bottom: "20mm",
+    left: "15mm",
+    right: "15mm",
+  },
+});
+
+    await browser.close();
+
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `inline; filename=invoice_${invoiceData.invoiceNo}.pdf`,
+    });
+
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to generate invoice" });
   }
 };

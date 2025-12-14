@@ -1,7 +1,7 @@
 const router = require("express").Router();
 const upload = require("../../middlewares/staffUpload");
 const controller = require("../../controllers/primary/staffController");
-const salaryController = require("../../controllers/primary/staffSalaryController");
+const salaryController = require("../../controllers/primary/finance/staffSalaryController");
 const { protect, authorizeRoles } = require("../../middlewares/authMiddleware");
 
 router.use(protect);
@@ -20,8 +20,6 @@ router.put(
   upload.none(),
   controller.updateStaff
 );
-router.put("/approve/:id", salaryController.approveSalary);
-router.put("/reject/:id", salaryController.rejectSalary);
 router.put("/update-status/:id", salaryController.updateSalaryStatus);
 
 // Upload documents (Step-3)

@@ -46,6 +46,14 @@ const StaffSalary = sequelizePrimary.define(
         key: "id",
       },
     },
+    assignedTo: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "users",
+        key: "id",
+      },
+    },
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: true,

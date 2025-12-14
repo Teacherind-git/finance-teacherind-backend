@@ -10,10 +10,27 @@ const TutorPayroll = sequelizePrimary.define(
     },
 
     payrollMonth: {
-      type: DataTypes.DATE, // e.g. "2025-01"
+      type: DataTypes.DATE,
       allowNull: true,
     },
 
+    // ✅ Class counts
+    totalClasses: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+
+    attendedClasses: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+
+    missedClasses: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+    },
+
+    // ✅ Salary breakup
     baseSalary: {
       type: DataTypes.FLOAT,
       allowNull: false,
@@ -26,10 +43,8 @@ const TutorPayroll = sequelizePrimary.define(
       defaultValue: 0,
     },
 
-    // ✅ Earnings array
     earnings: {
       type: DataTypes.JSON,
-      allowNull: true,
       defaultValue: [],
     },
 
@@ -38,10 +53,8 @@ const TutorPayroll = sequelizePrimary.define(
       defaultValue: 0,
     },
 
-    // ✅ Deductions array
     deductions: {
       type: DataTypes.JSON,
-      allowNull: true,
       defaultValue: [],
     },
 
@@ -56,20 +69,26 @@ const TutorPayroll = sequelizePrimary.define(
       defaultValue: 0,
     },
 
-    createdBy: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-    },
-
     isDeleted: {
       type: DataTypes.BOOLEAN,
-      allowNull: false,
       defaultValue: false,
     },
 
+    createdBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "users",
+        key: "id",
+      },
+    },
     updatedBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
+      references: {
+        model: "users",
+        key: "id",
+      },
     },
   },
   {

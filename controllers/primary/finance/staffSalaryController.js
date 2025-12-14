@@ -1,15 +1,31 @@
-const StaffSalary = require("../../models/primary/StaffSalary");
-const Staff = require("../../models/primary/Staff");
-const SecondaryUser = require("../../models/secondary/User");
-// const { generateSalaryReceipt } = require("../utils/pdfGenerator");
+const StaffSalary = require("../../../models/primary/StaffSalary");
+const Staff = require("../../../models/primary/Staff");
+const SecondaryUser = require("../../../models/secondary/User");
+const { Op } = require("sequelize");
 
 // -----------------------------------------------------
 // 1. GET ALL SALARIES
-// -----------------------------------------------------
+// ----------------------------------------------------
+
 exports.getAllSalaries = async (req, res) => {
   try {
+    const whereCondition = { isDeleted: false };
+
+    /* --------------------------------
+       DEPARTMENT BASED STATUS FILTER
+    --------------------------------- */
+    if (req.user?.department === "HR") {
+      whereCondition.status = "Pending";
+    }
+
+    if (req.user?.department === "Finance") {
+      whereCondition.status = {
+        [Op.ne]: "Pending",
+      };
+    }
+
     const salaries = await StaffSalary.findAll({
-      where: { isDeleted: false },
+      where: whereCondition,
       order: [["salaryDate", "DESC"]],
     });
 
@@ -18,7 +34,7 @@ exports.getAllSalaries = async (req, res) => {
     for (let salary of salaries) {
       let userDetails = null;
 
-      if (salary.type === "STAFF") {
+      if (salary.type === "STAFF" && salary.staffId) {
         const staff = await Staff.findOne({
           where: { id: salary.staffId },
           attributes: ["fullName", "phone", "email"],
@@ -33,7 +49,7 @@ exports.getAllSalaries = async (req, res) => {
           : null;
       }
 
-      if (salary.type === "COUNSELOR") {
+      if (salary.type === "COUNSELOR" && salary.counselorId) {
         const counselor = await SecondaryUser.findOne({
           where: { id: salary.counselorId },
           attributes: ["fullname", "phone", "email"],
@@ -80,71 +96,6 @@ exports.getAllSalaries = async (req, res) => {
 
 
 
-
-
-// -----------------------------------------------------
-// 2. APPROVE SALARY (HR)
-// -----------------------------------------------------
-exports.approveSalary = async (req, res) => {
-  try {
-    const salaryId = req.params.id;
-
-    const salary = await StaffSalary.findByPk(salaryId);
-
-    if (!salary) {
-      return res.status(404).json({ message: "Salary not found" });
-    }
-
-    salary.status = "APPROVED";
-    salary.updatedBy = req.user?.id || null;
-
-    await salary.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Salary approved successfully",
-    });
-  } catch (error) {
-    console.log("APPROVE SALARY ERROR:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-
-
-
-// -----------------------------------------------------
-// 3. REJECT SALARY (HR)
-// -----------------------------------------------------
-exports.rejectSalary = async (req, res) => {
-  try {
-    const salaryId = req.params.id;
-
-    const salary = await StaffSalary.findByPk(salaryId);
-
-    if (!salary) {
-      return res.status(404).json({ message: "Salary not found" });
-    }
-
-    salary.status = "REJECTED";
-    salary.updatedBy = req.user?.id || null;
-
-    await salary.save();
-
-    res.status(200).json({
-      success: true,
-      message: "Salary rejected",
-    });
-  } catch (error) {
-    console.log("REJECT SALARY ERROR:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
-};
-
-
-
-
-
 // -----------------------------------------------------
 // 4. UPDATE STATUS (Finance)
 // -----------------------------------------------------
@@ -173,11 +124,6 @@ exports.updateSalaryStatus = async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 };
-
-
-
-
-
 
 // -----------------------------------------------------
 // 5. GENERATE PDF RECEIPT (Finance)

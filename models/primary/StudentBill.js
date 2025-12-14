@@ -28,7 +28,6 @@ const StudentBill = sequelizePrimary.define(
         key: "id",
       },
     },
-
     updatedBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
