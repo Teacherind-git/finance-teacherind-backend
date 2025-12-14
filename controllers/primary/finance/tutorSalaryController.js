@@ -1,13 +1,13 @@
 const TutorSalary = require("../../../models/primary/TutorSalary");
 const TutorPayroll = require("../../../models/primary/TutorPayroll");
 const SecondaryUser = require("../../../models/secondary/User");
+const { Op } = require("sequelize");
+
 // const { generateSalaryReceipt } = require("../utils/pdfGenerator");
 
 /* -----------------------------------------------------
    1. GET ALL TUTOR SALARIES
 ----------------------------------------------------- */
-const { Op } = require("sequelize");
-
 exports.getAllTutorSalaries = async (req, res) => {
   try {
     const whereCondition = { isDeleted: false };
@@ -65,6 +65,7 @@ exports.getAllTutorSalaries = async (req, res) => {
         salaryDate: salary.salaryDate,
         dueDate: salary.dueDate,
         finalDueDate: salary.finalDueDate,
+        assignedTo: salary.assignedTo,
 
         tutorId: salary.tutorId,
         user: tutorDetails || { name: "", phone: "", email: "" },
@@ -96,7 +97,6 @@ exports.getAllTutorSalaries = async (req, res) => {
     });
   }
 };
-
 
 /* -----------------------------------------------------
    2. UPDATE SALARY STATUS (Finance)
@@ -184,5 +184,179 @@ exports.downloadTutorSalaryReceipt = async (req, res) => {
   } catch (error) {
     console.log("DOWNLOAD TUTOR RECEIPT ERROR:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/* -----------------------------------------------------
+   4. UPDATE ASSIGNED_TO STATUS (Finance)
+----------------------------------------------------- */
+exports.assignTutorSalaries = async (req, res) => {
+  try {
+    const { salaryIds, assignedTo } = req.body;
+
+    if (!Array.isArray(salaryIds) || salaryIds.length === 0) {
+      return res.status(400).json({
+        message: "salaryIds must be a non-empty array",
+      });
+    }
+
+    if (!assignedTo) {
+      return res.status(400).json({
+        message: "assignId is required",
+      });
+    }
+
+    // fetch only unassigned salaries
+    const salaries = await TutorSalary.findAll({
+      where: {
+        id: { [Op.in]: salaryIds },
+        assignedTo: 16,
+      },
+    });
+
+    if (!salaries.length) {
+      return res.status(400).json({
+        message: "No eligible tutor salaries found for assignment",
+      });
+    }
+
+    await TutorSalary.update(
+      {
+        assignedTo,
+        assignDate: new Date(),
+        updatedBy: req.user?.id || null,
+      },
+      {
+        where: {
+          id: { [Op.in]: salaries.map((s) => s.id) },
+        },
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `${salaries.length} tutor salaries assigned successfully`,
+      assignedCount: salaries.length,
+    });
+  } catch (error) {
+    console.error("BULK ASSIGN TUTOR SALARIES ERROR:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/* -----------------------------------------------------
+   5. GET ALL NON ASSIGNED TUTOR SALARIES
+----------------------------------------------------- */
+exports.getNonAssignedTutorSalaries = async (req, res) => {
+  try {
+    const { minAmount, maxAmount, fromDate, toDate } = req.query;
+
+    const whereCondition = {
+      isDeleted: false,
+      assignedTo: 16, // 👈 FIXED assignedTo filter
+    };
+
+    whereCondition.status = {
+      [Op.ne]: "Pending",
+    };
+
+    /* -------------------------------
+       AMOUNT RANGE FILTER
+    -------------------------------- */
+    if (minAmount || maxAmount) {
+      whereCondition.amount = {};
+
+      if (minAmount) {
+        whereCondition.amount[Op.gte] = Number(minAmount);
+      }
+
+      if (maxAmount) {
+        whereCondition.amount[Op.lte] = Number(maxAmount);
+      }
+    }
+
+    /* -------------------------------
+       DATE RANGE FILTER (createdAt)
+    -------------------------------- */
+    if (fromDate || toDate) {
+      whereCondition.createdAt = {};
+
+      if (fromDate) {
+        whereCondition.createdAt[Op.gte] = new Date(fromDate);
+      }
+
+      if (toDate) {
+        whereCondition.createdAt[Op.lte] = new Date(toDate);
+      }
+    }
+
+    const salaries = await TutorSalary.findAll({
+      where: whereCondition,
+      order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: TutorPayroll,
+          as: "payroll",
+        },
+      ],
+    });
+
+    const finalData = [];
+
+    for (let salary of salaries) {
+      let tutorDetails = null;
+
+      if (salary.tutorId) {
+        const tutor = await SecondaryUser.findOne({
+          where: { id: salary.tutorId },
+          attributes: ["fullname", "phone", "email"],
+        });
+
+        tutorDetails = tutor
+          ? {
+              name: tutor.fullname,
+              phone: tutor.phone,
+              email: tutor.email,
+            }
+          : null;
+      }
+
+      finalData.push({
+        salaryId: salary.id,
+        payrollMonth: salary.payrollMonth,
+        amount: salary.amount,
+        status: salary.status,
+        createdAt: salary.createdAt,
+        assignedTo: salary.assignedTo,
+        tutorId: salary.tutorId,
+        salaryDate: salary.salaryDate,
+        dueDate: salary.dueDate,
+        finalDueDate: salary.finalDueDate,
+        user: tutorDetails || { name: "", phone: "", email: "" },
+        payroll: salary.payroll
+          ? {
+              totalClasses: salary.payroll.totalClasses,
+              attendedClasses: salary.payroll.attendedClasses,
+              missedClasses: salary.payroll.missedClasses,
+              baseSalary: salary.payroll.baseSalary,
+              grossSalary: salary.payroll.grossSalary,
+              netSalary: salary.payroll.netSalary,
+            }
+          : null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      count: finalData.length,
+      data: finalData,
+    });
+  } catch (error) {
+    console.log("GET ASSIGNED TUTOR SALARY ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };

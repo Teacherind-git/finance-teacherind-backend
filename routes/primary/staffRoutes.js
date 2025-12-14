@@ -20,7 +20,12 @@ router.put(
   upload.none(),
   controller.updateStaff
 );
-router.put("/update-status/:id", salaryController.updateSalaryStatus);
+router.put("/salary/update-status/:id", salaryController.updateSalaryStatus);
+router.put(
+  "/salary/assign",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  salaryController.assignStaffSalaries
+);
 
 // Upload documents (Step-3)
 router.post(
@@ -35,6 +40,7 @@ router.get("/", controller.getAllStaff);
 router.get("/tutors", controller.getAllTutors);
 router.get("/counselors", controller.getAllCounselors);
 router.get("/salary", salaryController.getAllSalaries);
+router.get("/salary/non-assigned", salaryController.getNonAssignedStaffSalaries);
 router.get("/:id", controller.getStaff);
 
 // Delete

@@ -11,11 +11,18 @@ router.get(
   authorizeRoles("SuperAdmin", "Admin", "User"),
   salaryController.getAllTutorSalaries
 );
-
+router.get("/salary/non-assigned", salaryController.getNonAssignedTutorSalaries);
+//Update
+router.put(
+  "/salary/assign",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  salaryController.assignTutorSalaries
+);
 router.put(
   "/salary/update-status/:id",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   salaryController.updateTutorSalaryStatus
 );
+
 
 module.exports = router;

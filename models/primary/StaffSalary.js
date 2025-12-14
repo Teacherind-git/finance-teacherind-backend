@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
+const StaffPayroll = require("./StaffPayroll");
 
 const StaffSalary = sequelizePrimary.define(
   "staff_salary",
@@ -76,5 +77,15 @@ const StaffSalary = sequelizePrimary.define(
     timestamps: true,
   }
 );
+
+StaffSalary.belongsTo(StaffPayroll, {
+  foreignKey: "payrollId",
+  as: "payroll",
+});
+
+StaffPayroll.hasMany(StaffSalary, {
+  foreignKey: "payrollId",
+  as: "salaries",
+});
 
 module.exports = StaffSalary;

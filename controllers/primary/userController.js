@@ -267,3 +267,39 @@ exports.deleteUser = async (req, res) => {
     });
   }
 };
+
+exports.getFinanceStaffUsers = async (req, res) => {
+  try {
+    const users = await User.findAll({
+      where: {
+        roleId: 3,
+        department: "Finance",
+        position: {
+          [Op.in]: ["Staff", "Intern"],
+        },
+        status:"Active",
+        isDeleted: false, // remove if not using soft delete
+      },
+      attributes: [
+        "id",
+        "firstName",
+        "lastName",
+        "email",
+        "department",
+        "position",
+      ],
+      order: [["updatedAt", "ASC"]],
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: users,
+    });
+  } catch (error) {
+    console.error("Get finance staff error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch finance staff users",
+    });
+  }
+};

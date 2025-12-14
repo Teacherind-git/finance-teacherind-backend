@@ -2,6 +2,7 @@ const StaffSalary = require("../../../models/primary/StaffSalary");
 const Staff = require("../../../models/primary/Staff");
 const SecondaryUser = require("../../../models/secondary/User");
 const { Op } = require("sequelize");
+const StaffPayroll = require("../../../models/primary/StaffPayroll");
 
 // -----------------------------------------------------
 // 1. GET ALL SALARIES
@@ -76,6 +77,7 @@ exports.getAllSalaries = async (req, res) => {
         user: userDetails || { name: "", phone: "", email: "" },
         staffId: salary.staffId,
         counselorId: salary.counselorId,
+        assignedTo: salary.assignedTo,
       });
     }
 
@@ -93,8 +95,6 @@ exports.getAllSalaries = async (req, res) => {
     });
   }
 };
-
-
 
 // -----------------------------------------------------
 // 4. UPDATE STATUS (Finance)
@@ -140,9 +140,184 @@ exports.downloadReceipt = async (req, res) => {
 
     //const filePath = await generateSalaryReceipt(salary);
 
-    return res.download( `salary_receipt_${salaryId}.pdf`);
+    return res.download(`salary_receipt_${salaryId}.pdf`);
   } catch (error) {
     console.log("DOWNLOAD RECEIPT ERROR:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+/* -----------------------------------------------------
+   4. UPDATE ASSIGNED_TO STATUS (Finance)
+----------------------------------------------------- */
+exports.assignStaffSalaries = async (req, res) => {
+  try {
+    const { salaryIds, assignedTo } = req.body;
+
+    if (!Array.isArray(salaryIds) || salaryIds.length === 0) {
+      return res.status(400).json({
+        message: "salaryIds must be a non-empty array",
+      });
+    }
+
+    if (!assignedTo) {
+      return res.status(400).json({
+        message: "assignId is required",
+      });
+    }
+
+    // fetch only unassigned salaries
+    const salaries = await StaffSalary.findAll({
+      where: {
+        id: { [Op.in]: salaryIds },
+        assignedTo: 16,
+      },
+    });
+
+    if (!salaries.length) {
+      return res.status(400).json({
+        message: "No eligible staff salaries found for assignment",
+      });
+    }
+
+    await StaffSalary.update(
+      {
+        assignedTo,
+        assignDate: new Date(),
+        updatedBy: req.user?.id || null,
+      },
+      {
+        where: {
+          id: { [Op.in]: salaries.map((s) => s.id) },
+        },
+      }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `${salaries.length} staff salaries assigned successfully`,
+      assignedCount: salaries.length,
+    });
+  } catch (error) {
+    console.error("BULK ASSIGN STAFF SALARIES ERROR:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+/* -----------------------------------------------------
+   5. GET ALL NON ASSIGNED STAFF SALARIES
+----------------------------------------------------- */
+exports.getNonAssignedStaffSalaries = async (req, res) => {
+  try {
+    const { minAmount, maxAmount, fromDate, toDate } = req.query;
+
+    const whereCondition = {
+      isDeleted: false,
+      assignedTo: 16, // Fixed assignedTo filter
+    };
+
+    whereCondition.status = {
+      [Op.ne]: "Pending",
+    };
+
+    /* -------------------------------
+       AMOUNT RANGE FILTER
+    -------------------------------- */
+    if (minAmount || maxAmount) {
+      whereCondition.amount = {};
+      if (minAmount) whereCondition.amount[Op.gte] = Number(minAmount);
+      if (maxAmount) whereCondition.amount[Op.lte] = Number(maxAmount);
+    }
+
+    /* -------------------------------
+       DATE RANGE FILTER (createdAt)
+    -------------------------------- */
+    if (fromDate || toDate) {
+      whereCondition.createdAt = {};
+      if (fromDate) whereCondition.createdAt[Op.gte] = new Date(fromDate);
+      if (toDate) whereCondition.createdAt[Op.lte] = new Date(toDate);
+    }
+
+    const salaries = await StaffSalary.findAll({
+      where: whereCondition,
+      order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: StaffPayroll,
+          as: "payroll", // assuming staff has a payroll association
+        },
+      ],
+    });
+
+    const finalData = [];
+
+    for (let salary of salaries) {
+      let staffDetails = null;
+      if (salary.staffId || salary.counselorId) {
+        if (salary.type === "STAFF") {
+          const staff = await Staff.findOne({
+            where: { id: salary.staffId },
+            attributes: ["fullName", "phone", "email"],
+          });
+
+          staffDetails = staff
+            ? {
+                name: staff.fullName,
+                phone: staff.phone,
+                email: staff.email,
+              }
+            : null;
+        } else if (salary.type === "COUNSELOR") {
+          const counsellor = await SecondaryUser.findOne({
+            where: { id: salary.counselorId },
+            attributes: ["fullname", "phone", "email"],
+          });
+
+          staffDetails = counsellor
+            ? {
+                name: counsellor.fullname,
+                phone: counsellor.phone,
+                email: counsellor.email,
+              }
+            : null;
+        }
+      }
+
+      finalData.push({
+        salaryId: salary.id,
+        payrollMonth: salary.payrollMonth,
+        amount: salary.amount,
+        status: salary.status,
+        createdAt: salary.createdAt,
+        assignedTo: salary.assignedTo,
+        staffId: salary.staffId,
+        salaryDate: salary.salaryDate,
+        dueDate: salary.dueDate,
+        finalDueDate: salary.finalDueDate,
+        user: staffDetails || { name: "", phone: "", email: "" },
+        payroll: salary.payroll
+          ? {
+              baseSalary: salary.payroll.baseSalary,
+              grossSalary: salary.payroll.grossSalary,
+              netSalary: salary.payroll.netSalary,
+              totalWorkingDays: salary.payroll.totalWorkingDays,
+              attendedDays: salary.payroll.attendedDays,
+              missedDays: salary.payroll.missedDays,
+            }
+          : null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      count: finalData.length,
+      data: finalData,
+    });
+  } catch (error) {
+    console.log("GET ASSIGNED STAFF SALARY ERROR:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };
