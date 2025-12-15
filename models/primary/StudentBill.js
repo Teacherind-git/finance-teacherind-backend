@@ -6,6 +6,7 @@ const StudentBill = sequelizePrimary.define(
   "student_bill",
   {
     studentId: { type: DataTypes.INTEGER, allowNull: false },
+    invoiceId: { type: DataTypes.STRING, allowNull: false },
     amount: { type: DataTypes.FLOAT, allowNull: false },
     billDate: { type: DataTypes.DATE, allowNull: false },
     dueDate: { type: DataTypes.DATE, allowNull: false },

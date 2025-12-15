@@ -8,6 +8,8 @@ const Role = require("../../models/primary/Role");
 const StaffPayroll = require("../../models/primary/StaffPayroll");
 const logger = require("../../utils/logger");
 const SecondaryUser = require("../../models/secondary/User");
+const { getPaginationParams } = require("../../utils/pagination");
+
 
 /* ================= CREATE STAFF (STEP 1) ================= */
 exports.createStaff = async (req, res) => {
@@ -192,95 +194,6 @@ exports.getStaff = async (req, res) => {
   res.json(staff);
 };
 
-/* ================= GET ALL STAFF ================= */
-exports.getAllStaff = async (req, res) => {
-  try {
-    logger.info("Fetching all staff");
-
-    const staffList = await Staff.findAll({
-      where: {
-        isDeleted: false, // ✅ exclude deleted staff
-      },
-      include: [{ model: StaffDocument, as: "documents" }],
-      order: [["createdAt", "DESC"]],
-    });
-
-    const staffEmails = staffList.map((staff) => staff.email);
-
-    const newUsers = await User.findAll({
-      where: {
-        roleId: 3,
-        isDeleted: false, // ✅ exclude deleted users
-        email: { [Op.notIn]: staffEmails },
-      },
-      include: [
-        {
-          model: Role,
-          as: "role",
-          attributes: ["name"],
-        },
-      ],
-      attributes: [
-        "id",
-        "firstName",
-        "lastName",
-        "email",
-        "createdAt",
-        "updatedAt",
-        "department",
-        "position",
-        "status",
-        "createdBy",
-      ],
-    });
-
-    const createdByIds = [
-      ...staffList.map((s) => s.createdBy),
-      ...newUsers.map((u) => u.createdBy),
-    ].filter(Boolean);
-
-    const creators = await User.findAll({
-      where: {
-        id: { [Op.in]: createdByIds },
-        isDeleted: false, // ✅ safety
-      },
-      attributes: ["id", "firstName", "lastName"],
-    });
-
-    const creatorMap = {};
-    creators.forEach((c) => {
-      creatorMap[c.id] = `${c.firstName} ${c.lastName}`;
-    });
-
-    const formattedStaff = staffList.map((s) => ({
-      ...s.toJSON(),
-      createdBy: s.createdBy ? creatorMap[s.createdBy] || "Unknown" : null,
-    }));
-
-    const formattedUsers = newUsers.map((u) => ({
-      ...u.toJSON(),
-      fullName: `${u.firstName} ${u.lastName}`,
-      profilePhoto: "",
-      roleName: u.role?.name || "",
-      documents: [],
-      status: u.status ? "Active" : "Inactive",
-      createdBy: u.createdBy ? creatorMap[u.createdBy] || "Unknown" : null,
-    }));
-
-    const combinedList = [...formattedStaff, ...formattedUsers];
-
-    logger.info("Staff list fetched", {
-      staffCount: formattedStaff.length,
-      newUsers: formattedUsers.length,
-    });
-
-    res.status(200).json({ success: true, data: combinedList });
-  } catch (error) {
-    logger.error("Error fetching staff list", error);
-    res.status(500).json({ message: "Failed to fetch staff" });
-  }
-};
-
 /* ================= DELETE STAFF ================= */
 exports.deleteStaff = async (req, res) => {
   try {
@@ -338,18 +251,126 @@ exports.deleteDocument = async (req, res) => {
   res.json({ success: true });
 };
 
+/* ================= GET ALL STAFF ================= */
+exports.getAllStaff = async (req, res) => {
+  try {
+    logger.info("Fetching all staff");
+
+    const { page, limit, sortBy, sortOrder } = getPaginationParams(
+      req,
+      [
+        "fullName",
+        "email",
+        "createdAt",
+        "updatedAt",
+        "department",
+        "position",
+        "status",
+      ],
+      "updatedAt"
+    );
+
+    const staffList = await Staff.findAll({
+      where: { isDeleted: false },
+      include: [{ model: StaffDocument, as: "documents" }],
+    });
+
+    const staffEmails = staffList.map((s) => s.email);
+
+    const newUsers = await User.findAll({
+      where: {
+        roleId: 3,
+        isDeleted: false,
+        email: { [Op.notIn]: staffEmails },
+      },
+      include: [{ model: Role, as: "role", attributes: ["name"] }],
+    });
+
+    const createdByIds = [
+      ...staffList.map((s) => s.createdBy),
+      ...newUsers.map((u) => u.createdBy),
+    ].filter(Boolean);
+
+    const creators = await User.findAll({
+      where: { id: { [Op.in]: createdByIds }, isDeleted: false },
+      attributes: ["id", "firstName", "lastName"],
+    });
+
+    const creatorMap = {};
+    creators.forEach((c) => {
+      creatorMap[c.id] = `${c.firstName} ${c.lastName}`;
+    });
+
+    const formattedStaff = staffList.map((s) => ({
+      ...s.toJSON(),
+      fullName: s.fullName || s.fullname || "",
+      roleName: "Staff",
+      createdBy: s.createdBy ? creatorMap[s.createdBy] || "Unknown" : null,
+    }));
+
+    const formattedUsers = newUsers.map((u) => ({
+      ...u.toJSON(),
+      fullName: `${u.firstName} ${u.lastName}`,
+      roleName: u.role?.name || "",
+      documents: [],
+      status: u.status ? "Active" : "Inactive",
+      createdBy: u.createdBy ? creatorMap[u.createdBy] || "Unknown" : null,
+    }));
+
+    let combinedList = [...formattedStaff, ...formattedUsers];
+
+    combinedList.sort((a, b) => {
+      const A = a[sortBy];
+      const B = b[sortBy];
+      if (!A) return 1;
+      if (!B) return -1;
+      return sortOrder === "ASC" ? (A > B ? 1 : -1) : A < B ? 1 : -1;
+    });
+
+    const totalRecords = combinedList.length;
+    const start = (page - 1) * limit;
+    const paginatedData = combinedList.slice(start, start + limit);
+
+    return res.status(200).json({
+      success: true,
+      data: paginatedData,
+      pagination: {
+        totalRecords,
+        currentPage: page,
+        pageSize: limit,
+        totalPages: Math.ceil(totalRecords / limit),
+        sortBy,
+        sortOrder,
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching staff list", error);
+    return res.status(500).json({ message: "Failed to fetch staff" });
+  }
+};
+
+
 /* ================= GET ALL TUTORS ================= */
 exports.getAllTutors = async (req, res) => {
   try {
     logger.info("Fetching all tutors");
 
-    const tutors = await SecondaryUser.findAll({
-      where: { role: 3 }, // tutor role
+    const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
+      req,
+      ["id", "fullName", "email", "status"],
+      "id"
+    );
+
+    const { count, rows } = await SecondaryUser.findAndCountAll({
+      where: { role: 3 },
       attributes: ["id", "fullName", "email", "phone", "status"],
+      limit,
+      offset,
+      order: [[sortBy, sortOrder]],
       raw: true,
     });
 
-    const formattedTutors = tutors.map((tutor) => ({
+    const formattedTutors = rows.map((tutor) => ({
       id: tutor.id,
       fullName: tutor.fullName,
       email: tutor.email,
@@ -359,69 +380,72 @@ exports.getAllTutors = async (req, res) => {
       status: tutor.status === 1 ? "Active" : "Inactive",
     }));
 
-    logger.info(`Fetched ${formattedTutors.length} tutors from secondary DB`, {
-      tutorCount: formattedTutors.length,
-    });
-
     return res.status(200).json({
       success: true,
       data: formattedTutors,
+      pagination: {
+        totalRecords: count,
+        currentPage: page,
+        pageSize: limit,
+        totalPages: Math.ceil(count / limit),
+        sortBy,
+        sortOrder,
+      },
     });
   } catch (error) {
-    logger.error("Error fetching tutor list", {
-      error: error.message,
-      stack: error.stack,
-    });
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch tutors",
-    });
+    logger.error("Error fetching tutor list", error);
+    return res.status(500).json({ success: false, message: "Failed to fetch tutors" });
   }
 };
+
 
 /* ================= GET ALL COUNSELORS ================= */
 exports.getAllCounselors = async (req, res) => {
   try {
     logger.info("Fetching all counselors");
 
-    const counselors = await SecondaryUser.findAll({
-      where: { role: 2 }, // counselor role
+    const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
+      req,
+      ["id", "fullName", "email", "status"],
+      "id"
+    );
+
+    const { count, rows } = await SecondaryUser.findAndCountAll({
+      where: { role: 2 },
       attributes: ["id", "fullName", "email", "phone", "status"],
+      limit,
+      offset,
+      order: [[sortBy, sortOrder]],
       raw: true,
     });
 
-    const formattedCounselors = counselors.map((counselor) => ({
-      id: counselor.id,
-      fullName: counselor.fullName,
-      email: counselor.email,
-      phone: counselor.phone,
+    const formattedCounselors = rows.map((c) => ({
+      id: c.id,
+      fullName: c.fullName,
+      email: c.email,
+      phone: c.phone,
       position: "Counselor",
       department: "Academic",
-      status: counselor.status === 1 ? "Active" : "Inactive",
+      status: c.status === 1 ? "Active" : "Inactive",
     }));
-
-    logger.info(
-      `Fetched ${formattedCounselors.length} counselors from secondary DB`,
-      {
-        counselorCount: formattedCounselors.length,
-      }
-    );
 
     return res.status(200).json({
       success: true,
       data: formattedCounselors,
+      pagination: {
+        totalRecords: count,
+        currentPage: page,
+        pageSize: limit,
+        totalPages: Math.ceil(count / limit),
+        sortBy,
+        sortOrder,
+      },
     });
   } catch (error) {
-    logger.error("Error fetching counselor list", {
-      error: error.message,
-      stack: error.stack,
-    });
-
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch counselors",
-    });
+    logger.error("Error fetching counselor list", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch counselors" });
   }
 };
 

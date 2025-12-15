@@ -78,6 +78,7 @@ exports.getAllSalaries = async (req, res) => {
         staffId: salary.staffId,
         counselorId: salary.counselorId,
         assignedTo: salary.assignedTo,
+        paidDate: salary.paidDate,
       });
     }
 
@@ -113,14 +114,24 @@ exports.updateSalaryStatus = async (req, res) => {
     salary.status = status;
     salary.updatedBy = req.user?.id || null;
 
+    // ✅ set paidDate only when status = Paid
+    if (status === "Paid") {
+      salary.paidDate = new Date();
+    }
+
+    // Optional: clear paidDate if status changes from Paid
+    if (status !== "Paid") {
+      salary.paidDate = null;
+    }
+
     await salary.save();
 
     res.status(200).json({
       success: true,
-      message: "Status updated",
+      message: "Status updated successfully",
     });
   } catch (error) {
-    console.log("UPDATE STATUS ERROR:", error);
+    console.error("UPDATE STATUS ERROR:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

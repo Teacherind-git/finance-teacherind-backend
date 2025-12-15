@@ -1,10 +1,12 @@
 const Expense = require("../../models/primary/Expense");
 const logger = require("../../utils/logger");
+const { getPaginationParams } = require("../../utils/pagination");
 
 // CREATE
 exports.createExpense = async (req, res) => {
   try {
-    const { expenseDate, category, subCategory, description, amount } = req.body;
+    const { expenseDate, category, subCategory, description, amount } =
+      req.body;
 
     if (!expenseDate || !category || !subCategory || !amount) {
       return res.status(400).json({
@@ -34,14 +36,42 @@ exports.createExpense = async (req, res) => {
 // READ ALL
 exports.getAllExpenses = async (req, res) => {
   try {
-    const expenses = await Expense.findAll({
-      order: [["expenseDate", "DESC"]],
+    // ✅ allowed fields for sorting
+    const allowedSortFields = [
+      "expenseDate",
+      "amount",
+      "category",
+      "createdAt",
+    ];
+
+    const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
+      req,
+      allowedSortFields,
+      "expenseDate"
+    );
+
+    // ✅ use findAndCountAll for pagination
+    const { rows: expenses, count: total } = await Expense.findAndCountAll({
+      order: [[sortBy, sortOrder]],
+      limit,
+      offset,
     });
 
-    logger.info(`Fetched ${expenses.length} expenses`);
-    res.json(expenses);
+    logger.info(`Fetched ${expenses.length} expenses (page ${page})`);
+
+    res.json({
+      data: expenses,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
   } catch (error) {
-    logger.error("Failed to fetch expenses", { error: error.message });
+    logger.error("Failed to fetch expenses", {
+      error: error.message,
+    });
     res.status(500).json({ message: "Failed to fetch expenses" });
   }
 };
@@ -76,7 +106,8 @@ exports.updateExpense = async (req, res) => {
       return res.status(404).json({ message: "Expense not found" });
     }
 
-    const { expenseDate, category, subCategory, description, amount } = req.body;
+    const { expenseDate, category, subCategory, description, amount } =
+      req.body;
 
     await expense.update({
       expenseDate,

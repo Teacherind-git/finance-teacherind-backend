@@ -25,6 +25,36 @@ const logBoth = {
   },
 };
 
+async function generateInvoiceId(transaction = null) {
+  const year = moment().format("YYYY");
+  const month = moment().format("MM");
+
+  const prefix = `INV-${year}-${month}`;
+
+  // Find last invoice for this month
+  const lastBill = await StudentBill.findOne({
+    where: {
+      invoiceId: {
+        [Op.like]: `${prefix}-%`,
+      },
+    },
+    order: [["createdAt", "DESC"]],
+    transaction,
+  });
+
+  let nextNumber = 1;
+
+  if (lastBill?.invoiceId) {
+    const parts = lastBill.invoiceId.split("-");
+    const lastNumber = parseInt(parts[3], 10);
+    nextNumber = lastNumber + 1;
+  }
+
+  const paddedNumber = String(nextNumber).padStart(3, "0");
+
+  return `${prefix}-${paddedNumber}`;
+}
+
 async function generateBills() {
   const startOfToday = moment().startOf("day");
   const endOfToday = moment().endOf("day");
@@ -93,7 +123,10 @@ async function generateBills() {
         continue;
       }
 
+      const invoiceId = await generateInvoiceId();
+
       await StudentBill.create({
+        invoiceId,
         studentId: student.id,
         amount: totalAmount,
         billDate: moment().toDate(),
@@ -115,6 +148,7 @@ async function generateBills() {
       logBoth.info("Bill generated successfully", {
         studentId: student.id,
         amount: totalAmount,
+        invoiceId,
       });
     }
 

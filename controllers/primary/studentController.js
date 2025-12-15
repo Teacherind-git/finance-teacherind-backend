@@ -6,6 +6,7 @@ const ClassRange = require("../../models/primary/ClassRange");
 const { sequelizePrimary } = require("../../config/db");
 const logger = require("../../utils/logger");
 const axios = require("axios");
+const { getPaginationParams } = require("../../utils/pagination");
 
 /* ================= CREATE STUDENT ================= */
 exports.createStudent = async (req, res) => {
@@ -94,14 +95,22 @@ exports.createStudent = async (req, res) => {
 /* ================= GET ALL STUDENTS ================= */
 exports.getAllStudents = async (req, res) => {
   try {
-    const {
-      page = 1,
-      limit = 10,
-      sortBy = "createdAt",
-      sortOrder = "DESC",
-    } = req.query;
+    // ✅ allowed sortable fields
+    const allowedSortFields = [
+      "createdAt",
+      "updatedAt",
+      "name",
+      "email",
+      "status",
+    ];
 
-    const offset = (Number(page) - 1) * Number(limit);
+    const {
+      page,
+      limit,
+      offset,
+      sortBy,
+      sortOrder,
+    } = getPaginationParams(req, allowedSortFields, "createdAt");
 
     logger.info("Fetching students with pagination & sorting", {
       page,
@@ -110,36 +119,37 @@ exports.getAllStudents = async (req, res) => {
       sortOrder,
     });
 
-    const { rows: students, count } = await Student.findAndCountAll({
-      where: { isDeleted: false },
-      include: [
-        {
-          model: StudentDetail,
-          as: "details",
-          include: [
-            {
-              model: ClassRange,
-              as: "class_range",
-              attributes: ["id", "label"],
-            },
-            {
-              model: Subject,
-              as: "subject",
-              attributes: ["id", "name"],
-            },
-            {
-              model: Package,
-              as: "package",
-              attributes: ["id", "name"],
-            },
-          ],
-        },
-      ],
-      limit: Number(limit),
-      offset,
-      order: [[sortBy, sortOrder.toUpperCase() === "ASC" ? "ASC" : "DESC"]],
-      distinct: true, // ✅ important when using include
-    });
+    const { rows: students, count } =
+      await Student.findAndCountAll({
+        where: { isDeleted: false },
+        include: [
+          {
+            model: StudentDetail,
+            as: "details",
+            include: [
+              {
+                model: ClassRange,
+                as: "class_range",
+                attributes: ["id", "label"],
+              },
+              {
+                model: Subject,
+                as: "subject",
+                attributes: ["id", "name"],
+              },
+              {
+                model: Package,
+                as: "package",
+                attributes: ["id", "name"],
+              },
+            ],
+          },
+        ],
+        limit,
+        offset,
+        order: [[sortBy, sortOrder]],
+        distinct: true, // ✅ important with include
+      });
 
     logger.info(`Students fetched: ${students.length}`);
 
@@ -148,8 +158,8 @@ exports.getAllStudents = async (req, res) => {
       data: students,
       pagination: {
         totalRecords: count,
-        currentPage: Number(page),
-        pageSize: Number(limit),
+        currentPage: page,
+        pageSize: limit,
         totalPages: Math.ceil(count / limit),
         sortBy,
         sortOrder,
@@ -163,6 +173,7 @@ exports.getAllStudents = async (req, res) => {
     });
   }
 };
+
 
 /* ================= GET SINGLE STUDENT ================= */
 exports.getStudent = async (req, res) => {

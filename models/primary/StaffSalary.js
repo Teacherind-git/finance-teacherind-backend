@@ -55,6 +55,10 @@ const StaffSalary = sequelizePrimary.define(
         key: "id",
       },
     },
+    paidDate: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: true,

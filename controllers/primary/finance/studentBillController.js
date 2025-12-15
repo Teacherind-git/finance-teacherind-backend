@@ -8,15 +8,34 @@ const Package = require("../../../models/primary/Package");
 const logger = require("../../../utils/logger");
 const { getInvoiceData } = require("../../../services/invoiceService");
 const invoiceTemplate = require("../../../templates/invoiceTemplate");
-
+const { getPaginationParams } = require("../../../utils/pagination");
 
 exports.getStudentBills = async (req, res) => {
   try {
     const { studentId, status } = req.query;
 
+    // ✅ allowed sortable fields
+    const allowedSortFields = [
+      "createdAt",
+      "updatedAt",
+      "dueDate",
+      "amount",
+      "status",
+    ];
+
+    const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
+      req,
+      allowedSortFields,
+      "createdAt"
+    );
+
     logger.info("Get student bills API called", {
       studentId,
       status,
+      page,
+      limit,
+      sortBy,
+      sortOrder,
       requestedBy: req.user?.id || "anonymous",
     });
 
@@ -26,7 +45,7 @@ exports.getStudentBills = async (req, res) => {
 
     logger.debug("Student bill query filters", where);
 
-    const bills = await StudentBill.findAll({
+    const { rows: bills, count } = await StudentBill.findAndCountAll({
       where,
       include: [
         {
@@ -49,14 +68,25 @@ exports.getStudentBills = async (req, res) => {
                   as: "class_range",
                   attributes: ["id", "label"],
                 },
-                { model: Subject, as: "subject", attributes: ["id", "name"] },
-                { model: Package, as: "package", attributes: ["id", "name"] },
+                {
+                  model: Subject,
+                  as: "subject",
+                  attributes: ["id", "name"],
+                },
+                {
+                  model: Package,
+                  as: "package",
+                  attributes: ["id", "name"],
+                },
               ],
             },
           ],
         },
       ],
-      order: [["createdAt", "DESC"]],
+      limit,
+      offset,
+      order: [[sortBy, sortOrder]],
+      distinct: true, // ✅ important when using include
     });
 
     if (!bills.length) {
@@ -69,8 +99,15 @@ exports.getStudentBills = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      count: bills.length,
-      bills,
+      data: bills,
+      pagination: {
+        totalRecords: count,
+        currentPage: page,
+        pageSize: limit,
+        totalPages: Math.ceil(count / limit),
+        sortBy,
+        sortOrder,
+      },
     });
   } catch (error) {
     logger.error("Get Student Bills Error", error);
@@ -103,15 +140,15 @@ exports.generateInvoicePdf = async (req, res) => {
     await page.setContent(html, { waitUntil: "networkidle0" });
 
     const pdfBuffer = await page.pdf({
-  format: "A4",
-  printBackground: true,
-  margin: {
-    top: "20mm",
-    bottom: "20mm",
-    left: "15mm",
-    right: "15mm",
-  },
-});
+      format: "A4",
+      printBackground: true,
+      margin: {
+        top: "20mm",
+        bottom: "20mm",
+        left: "15mm",
+        right: "15mm",
+      },
+    });
 
     await browser.close();
 

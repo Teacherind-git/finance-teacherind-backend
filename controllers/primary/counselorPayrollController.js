@@ -1,27 +1,43 @@
 const User = require("../../models/secondary/User");
 const counselorPayroll = require("../../models/primary/CounselorPayroll");
 const logger = require("../../utils/logger");
+const { getPaginationParams } = require("../../utils/pagination");
 
 /**
  * GET counselor payroll list (default values if payroll not created)
  */
+
 exports.getCounselorPayrollList = async (req, res) => {
   logger.info("Fetching counselor payroll list");
 
   try {
-    // ✅ counselors from secondary DB
+    const { page, limit, sortBy, sortOrder } = getPaginationParams(
+      req,
+      [
+        "fullName",
+        "netSalary",
+        "grossSalary",
+        "totalEarnings",
+        "totalDeductions",
+        "payrollMonth",
+      ],
+      "fullName"
+    );
+
+    /* -------------------------
+       FETCH COUNSELORS (SECONDARY DB)
+    -------------------------- */
     const counselors = await User.findAll({
-      where: {
-        role: 2, // ✅ counselor role
-        status: 1,
-      },
+      where: { role: 2, status: 1 },
       attributes: ["id", "fullname"],
       raw: true,
     });
 
     logger.info(`Fetched ${counselors.length} counselors`);
 
-    // ✅ payrolls from primary DB
+    /* -------------------------
+       FETCH PAYROLLS (PRIMARY DB)
+    -------------------------- */
     const payrolls = await counselorPayroll.findAll({
       where: { isDeleted: false },
       raw: true,
@@ -32,7 +48,9 @@ exports.getCounselorPayrollList = async (req, res) => {
       payrollMap[p.counselorId] = p;
     });
 
-    // ✅ unify response
+    /* -------------------------
+       MERGE RESULT
+    -------------------------- */
     let result = counselors.map((c) => {
       const payroll = payrollMap[c.id];
 
@@ -52,14 +70,47 @@ exports.getCounselorPayrollList = async (req, res) => {
       };
     });
 
-    // ✅ sort: netSalary = 0 first
+    /* -------------------------
+       BUSINESS SORT: netSalary = 0 FIRST
+    -------------------------- */
     result.sort((a, b) => {
       if (a.netSalary === 0 && b.netSalary !== 0) return -1;
       if (a.netSalary !== 0 && b.netSalary === 0) return 1;
-      return 0; // keep relative order otherwise
+      return 0;
     });
 
-    res.json({ success: true, data: result });
+    /* -------------------------
+       DYNAMIC SORT (UI)
+    -------------------------- */
+    result.sort((a, b) => {
+      const A = a[sortBy];
+      const B = b[sortBy];
+
+      if (A == null) return 1;
+      if (B == null) return -1;
+
+      return sortOrder === "ASC" ? (A > B ? 1 : -1) : A < B ? 1 : -1;
+    });
+
+    /* -------------------------
+       PAGINATION
+    -------------------------- */
+    const totalRecords = result.length;
+    const start = (page - 1) * limit;
+    const paginatedData = result.slice(start, start + limit);
+
+    res.json({
+      success: true,
+      data: paginatedData,
+      pagination: {
+        totalRecords,
+        currentPage: page,
+        pageSize: limit,
+        totalPages: Math.ceil(totalRecords / limit),
+        sortBy,
+        sortOrder,
+      },
+    });
   } catch (err) {
     logger.error("Failed to fetch counselor payroll list", {
       error: err.message,
@@ -72,7 +123,6 @@ exports.getCounselorPayrollList = async (req, res) => {
     });
   }
 };
-
 
 /**
  * CREATE / UPDATE counselor payroll

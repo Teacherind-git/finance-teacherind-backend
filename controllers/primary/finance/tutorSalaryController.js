@@ -66,6 +66,7 @@ exports.getAllTutorSalaries = async (req, res) => {
         dueDate: salary.dueDate,
         finalDueDate: salary.finalDueDate,
         assignedTo: salary.assignedTo,
+        paidDate: salary.paidDate,
 
         tutorId: salary.tutorId,
         user: tutorDetails || { name: "", phone: "", email: "" },
@@ -114,6 +115,16 @@ exports.updateTutorSalaryStatus = async (req, res) => {
 
     salary.status = status;
     salary.updatedBy = req.user?.id || null;
+
+    // ✅ set paidDate only when status = Paid
+    if (status === "Paid") {
+      salary.paidDate = new Date();
+    }
+
+    // Optional: clear paidDate if status changes from Paid
+    if (status !== "Paid") {
+      salary.paidDate = null;
+    }
 
     await salary.save();
 

@@ -1,6 +1,8 @@
 const StaffPayroll = require("../../models/primary/StaffPayroll");
 const Staff = require("../../models/primary/Staff");
 const logger = require("../../utils/logger");
+const { getPaginationParams } = require("../../utils/pagination");
+
 
 /**
  * CREATE payroll
@@ -63,6 +65,17 @@ exports.getAllPayrolls = async (req, res) => {
   logger.info("Fetch all payrolls request");
 
   try {
+    const { page, limit, sortBy, sortOrder } = getPaginationParams(
+      req,
+      [
+        "createdAt",
+        "netSalary",
+        "grossSalary",
+        "status",
+      ],
+      "createdAt"
+    );
+
     const payrolls = await StaffPayroll.findAll({
       where: { isDeleted: false },
       include: [
@@ -71,23 +84,58 @@ exports.getAllPayrolls = async (req, res) => {
           attributes: ["id", "fullName", "email", "employeeId"],
         },
       ],
-      order: [["createdAt", "DESC"]],
-      raw: false, // keep nested Staff object
+      raw: false,
       nest: true,
     });
 
-    logger.info("Payrolls fetched successfully", {
-      count: payrolls.length,
-    });
-
-    // ✅ sort: netSalary = 0 first
-    const sortedPayrolls = payrolls.sort((a, b) => {
+    /* -------------------------
+       BUSINESS SORT: netSalary = 0 FIRST
+    -------------------------- */
+    payrolls.sort((a, b) => {
       if (a.netSalary === 0 && b.netSalary !== 0) return -1;
       if (a.netSalary !== 0 && b.netSalary === 0) return 1;
-      return 0; // keep relative order otherwise
+      return 0;
     });
 
-    res.json({ data: sortedPayrolls });
+    /* -------------------------
+       DYNAMIC SORT (UI)
+    -------------------------- */
+    payrolls.sort((a, b) => {
+      const A = a[sortBy];
+      const B = b[sortBy];
+
+      if (A == null) return 1;
+      if (B == null) return -1;
+
+      return sortOrder === "ASC"
+        ? A > B ? 1 : -1
+        : A < B ? 1 : -1;
+    });
+
+    /* -------------------------
+       PAGINATION
+    -------------------------- */
+    const totalRecords = payrolls.length;
+    const startIndex = (page - 1) * limit;
+    const paginatedData = payrolls.slice(startIndex, startIndex + limit);
+
+    logger.info("Payrolls fetched successfully", {
+      totalRecords,
+      page,
+      limit,
+    });
+
+    res.json({
+      data: paginatedData,
+      pagination: {
+        totalRecords,
+        currentPage: page,
+        pageSize: limit,
+        totalPages: Math.ceil(totalRecords / limit),
+        sortBy,
+        sortOrder,
+      },
+    });
   } catch (error) {
     logger.error("Error fetching payrolls", {
       error: error.message,
@@ -97,6 +145,7 @@ exports.getAllPayrolls = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 
 /**
  * GET payroll by ID
