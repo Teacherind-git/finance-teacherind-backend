@@ -9,6 +9,8 @@ const logger = require("../../../utils/logger");
 const { getInvoiceData } = require("../../../services/invoiceService");
 const invoiceTemplate = require("../../../templates/invoiceTemplate");
 const { getPaginationParams } = require("../../../utils/pagination");
+const { Op } = require("sequelize");
+const moment = require("moment");
 
 exports.getStudentBills = async (req, res) => {
   try {
@@ -163,3 +165,92 @@ exports.generateInvoicePdf = async (req, res) => {
     res.status(500).json({ message: "Failed to generate invoice" });
   }
 };
+
+exports.getStudentBillsSummary = async (req, res) => {
+  try {
+    logger.info("Get global student bills summary API called", {
+      requestedBy: req.user?.id || "anonymous",
+    });
+
+    const baseWhere = {
+      status: {
+        [Op.in]: ["Pending", "On Due", "Overdue"],
+      },
+    };
+
+    // 📅 Date ranges
+    const todayStart = moment().startOf("day").toDate();
+    const todayEnd = moment().endOf("day").toDate();
+
+    const weekStart = moment().startOf("week").toDate();
+    const weekEnd = moment().endOf("week").toDate();
+
+    const [
+      totalCount,
+      totalAmount,
+      todayCount,
+      todayAmount,
+      weekCount,
+      weekAmount,
+    ] = await Promise.all([
+      // 🔢 TOTAL
+      StudentBill.count({ where: baseWhere }),
+      StudentBill.sum("amount", { where: baseWhere }),
+
+      // 🔢 TODAY
+      StudentBill.count({
+        where: {
+          ...baseWhere,
+          dueDate: { [Op.between]: [todayStart, todayEnd] },
+        },
+      }),
+      StudentBill.sum("amount", {
+        where: {
+          ...baseWhere,
+          dueDate: { [Op.between]: [todayStart, todayEnd] },
+        },
+      }),
+
+      // 🔢 WEEK
+      StudentBill.count({
+        where: {
+          ...baseWhere,
+          dueDate: { [Op.between]: [weekStart, weekEnd] },
+        },
+      }),
+      StudentBill.sum("amount", {
+        where: {
+          ...baseWhere,
+          dueDate: { [Op.between]: [weekStart, weekEnd] },
+        },
+      }),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        total: {
+          count: totalCount,
+          amount: totalAmount || 0,
+        },
+        today: {
+          count: todayCount,
+          amount: todayAmount || 0,
+        },
+        week: {
+          count: weekCount,
+          amount: weekAmount || 0,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error("Get Student Bills Summary Error", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch student bills summary",
+    });
+  }
+};
+
+

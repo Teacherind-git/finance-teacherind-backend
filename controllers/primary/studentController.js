@@ -306,3 +306,37 @@ exports.deleteStudent = async (req, res) => {
       .json({ success: false, message: "Failed to delete student" });
   }
 };
+/* ================= STUDENT SUMMARY ================= */
+exports.getStudentSummary = async (req, res) => {
+  try {
+    logger.info("Fetching student summary");
+
+    const [totalStudents, activeStudents, onboardStudents] =
+      await Promise.all([
+        Student.count({
+          where: { isDeleted: false },
+        }),
+        Student.count({
+          where: { isDeleted: false, status: "Active" },
+        }),
+        Student.count({
+          where: { isDeleted: false, status: "Onboard" },
+        }),
+      ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalStudents,
+        activeStudents,
+        onboardStudents,
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching student summary", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch student summary",
+    });
+  }
+};

@@ -7,6 +7,7 @@ const {
   updateUser,
   deleteUser,
   getFinanceStaffUsers,
+  getUsersSummary,
 } = require("../../controllers/primary/userController");
 
 router.use(protect);
@@ -15,6 +16,11 @@ router.get(
   "/finance-staff",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   getFinanceStaffUsers
+);
+router.get(
+  "/summary",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  getUsersSummary
 );
 router.post("/", authorizeRoles("SuperAdmin", "User"), createUser);
 router.put("/:id", authorizeRoles("SuperAdmin", "User"), updateUser);

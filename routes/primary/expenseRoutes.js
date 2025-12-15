@@ -1,11 +1,33 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const expenseController = require('../../controllers/primary/expenseController');
+const expenseController = require("../../controllers/primary/expenseController");
+const { protect, authorizeRoles } = require("../../middlewares/authMiddleware");
 
-router.post('/', expenseController.createExpense);          // Create
-router.get('/', expenseController.getAllExpenses);          // Read all
-router.get('/:id', expenseController.getExpenseById);       // Read one
-router.put('/:id', expenseController.updateExpense);        // Update
-router.delete('/:id', expenseController.deleteExpense);     // Delete
+router.use(protect);
+router.post(
+  "/",
+  authorizeRoles("SuperAdmin", "User"),
+  expenseController.createExpense
+); // Create
+router.get(
+  "/",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  expenseController.getAllExpenses
+); // Read all
+router.get(
+  "/:id",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  expenseController.getExpenseById
+); // Read one
+router.put(
+  "/:id",
+  authorizeRoles("SuperAdmin", "User"),
+  expenseController.updateExpense
+); // Update
+router.delete(
+  "/:id",
+  authorizeRoles("SuperAdmin", "User"),
+  expenseController.deleteExpense
+); // Delete
 
 module.exports = router;

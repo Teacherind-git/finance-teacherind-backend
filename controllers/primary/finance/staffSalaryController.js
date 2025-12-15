@@ -3,11 +3,12 @@ const Staff = require("../../../models/primary/Staff");
 const SecondaryUser = require("../../../models/secondary/User");
 const { Op } = require("sequelize");
 const StaffPayroll = require("../../../models/primary/StaffPayroll");
+const { getPaginationParams } = require("../../../utils/pagination");
+
 
 // -----------------------------------------------------
 // 1. GET ALL SALARIES
 // ----------------------------------------------------
-
 exports.getAllSalaries = async (req, res) => {
   try {
     const whereCondition = { isDeleted: false };
@@ -25,47 +26,93 @@ exports.getAllSalaries = async (req, res) => {
       };
     }
 
-    const salaries = await StaffSalary.findAll({
+    /* --------------------------------
+       PAGINATION & SORTING
+    --------------------------------- */
+    const {
+      page,
+      limit,
+      offset,
+      sortBy,
+      sortOrder,
+    } = getPaginationParams(req, [
+      "salaryDate",
+      "payrollMonth",
+      "amount",
+      "status",
+      "dueDate",
+      "finalDueDate",
+      "createdAt",
+    ]);
+
+    const { rows: salaries, count } = await StaffSalary.findAndCountAll({
       where: whereCondition,
-      order: [["salaryDate", "DESC"]],
+      limit,
+      offset,
+      order: [[sortBy, sortOrder]],
     });
 
-    const finalData = [];
+    /* --------------------------------
+       COLLECT IDS
+    --------------------------------- */
+    const staffIds = [];
+    const counselorIds = [];
 
-    for (let salary of salaries) {
-      let userDetails = null;
+    salaries.forEach((s) => {
+      if (s.type === "STAFF" && s.staffId) staffIds.push(s.staffId);
+      if (s.type === "COUNSELOR" && s.counselorId)
+        counselorIds.push(s.counselorId);
+    });
 
-      if (salary.type === "STAFF" && salary.staffId) {
-        const staff = await Staff.findOne({
-          where: { id: salary.staffId },
-          attributes: ["fullName", "phone", "email"],
-        });
+    /* --------------------------------
+       FETCH USERS IN BULK
+    --------------------------------- */
+    const [staffList, counselorList] = await Promise.all([
+      Staff.findAll({
+        where: { id: staffIds },
+        attributes: ["id", "fullName", "phone", "email"],
+        raw: true,
+      }),
+      SecondaryUser.findAll({
+        where: { id: counselorIds },
+        attributes: ["id", "fullname", "phone", "email"],
+        raw: true,
+      }),
+    ]);
 
-        userDetails = staff
-          ? {
-              name: staff.fullName,
-              phone: staff.phone,
-              email: staff.email,
-            }
-          : null;
+    const staffMap = {};
+    staffList.forEach((s) => {
+      staffMap[s.id] = {
+        name: s.fullName,
+        phone: s.phone,
+        email: s.email,
+      };
+    });
+
+    const counselorMap = {};
+    counselorList.forEach((c) => {
+      counselorMap[c.id] = {
+        name: c.fullname,
+        phone: c.phone,
+        email: c.email,
+      };
+    });
+
+    /* --------------------------------
+       FINAL DATA
+    --------------------------------- */
+    const finalData = salaries.map((salary) => {
+      let user = { name: "", phone: "", email: "" };
+
+      if (salary.type === "STAFF") {
+        user = staffMap[salary.staffId] || user;
       }
 
-      if (salary.type === "COUNSELOR" && salary.counselorId) {
-        const counselor = await SecondaryUser.findOne({
-          where: { id: salary.counselorId },
-          attributes: ["fullname", "phone", "email"],
-        });
-
-        userDetails = counselor
-          ? {
-              name: counselor.fullname,
-              phone: counselor.phone,
-              email: counselor.email,
-            }
-          : null;
+      if (salary.type === "COUNSELOR") {
+        user = counselorMap[salary.counselorId] || user;
       }
 
-      finalData.push({
+      return {
         salaryId: salary.id,
         type: salary.type,
         payrollMonth: salary.payrollMonth,
@@ -74,17 +121,22 @@ exports.getAllSalaries = async (req, res) => {
         salaryDate: salary.salaryDate,
         dueDate: salary.dueDate,
         finalDueDate: salary.finalDueDate,
-        user: userDetails || { name: "", phone: "", email: "" },
+        user,
         staffId: salary.staffId,
         counselorId: salary.counselorId,
         assignedTo: salary.assignedTo,
         paidDate: salary.paidDate,
-      });
-    }
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      count: finalData.length,
+      pagination: {
+        page,
+        limit,
+        totalRecords: count,
+        totalPages: Math.ceil(count / limit),
+      },
       data: finalData,
     });
   } catch (error) {
@@ -96,6 +148,7 @@ exports.getAllSalaries = async (req, res) => {
     });
   }
 };
+
 
 // -----------------------------------------------------
 // 4. UPDATE STATUS (Finance)

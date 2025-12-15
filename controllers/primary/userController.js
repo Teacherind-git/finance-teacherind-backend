@@ -268,6 +268,7 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
+/* ================= FINANCE STAFF USER ================= */
 exports.getFinanceStaffUsers = async (req, res) => {
   try {
     const users = await User.findAll({
@@ -300,6 +301,68 @@ exports.getFinanceStaffUsers = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch finance staff users",
+    });
+  }
+};
+/* ================= USERS SUMMARY ================= */
+exports.getUsersSummary = async (req, res) => {
+  try {
+    const { type } = req.query;
+
+    logger.info("Fetching users summary", {
+      requestedBy: req.user.id,
+      role: req.user.role?.name,
+      type,
+    });
+
+    let whereCondition = { isDeleted: false };
+
+    /* ---------- Normal User ---------- */
+    if (req.user.role.name === "User") {
+      whereCondition.createdBy = req.user.id;
+    }
+
+    /* ---------- SuperAdmin ---------- */
+    if (req.user.role.name === "SuperAdmin") {
+      if (type === "SuperAdmin") {
+        whereCondition.createdBy = req.user.id;
+      } else if (type === "Others") {
+        whereCondition.createdBy = { [Op.ne]: req.user.id };
+      }
+    }
+
+    /* ---------- Counts ---------- */
+    const [totalUsers, activeUsers, inactiveUsers] = await Promise.all([
+      User.count({
+        where: whereCondition,
+      }),
+      User.count({
+        where: {
+          ...whereCondition,
+          status: "Active", // adjust if numeric (e.g. 1)
+        },
+      }),
+      User.count({
+        where: {
+          ...whereCondition,
+          status: "Inactive", // adjust if numeric (e.g. 0)
+        },
+      }),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalUsers,
+        activeUsers,
+        inactiveUsers,
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching users summary", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users summary",
     });
   }
 };

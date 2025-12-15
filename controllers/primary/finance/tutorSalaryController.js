@@ -1,6 +1,7 @@
 const TutorSalary = require("../../../models/primary/TutorSalary");
 const TutorPayroll = require("../../../models/primary/TutorPayroll");
 const SecondaryUser = require("../../../models/secondary/User");
+const { getPaginationParams } = require("../../../utils/pagination");
 const { Op } = require("sequelize");
 
 // const { generateSalaryReceipt } = require("../utils/pdfGenerator");
@@ -25,9 +26,27 @@ exports.getAllTutorSalaries = async (req, res) => {
       };
     }
 
-    const salaries = await TutorSalary.findAll({
+    /* --------------------------------
+       PAGINATION & SORTING
+    --------------------------------- */
+    const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
+      req,
+      [
+        "salaryDate",
+        "payrollMonth",
+        "amount",
+        "status",
+        "dueDate",
+        "finalDueDate",
+        "createdAt",
+      ]
+    );
+
+    const { rows: salaries, count } = await TutorSalary.findAndCountAll({
       where: whereCondition,
-      order: [["salaryDate", "DESC"]],
+      limit,
+      offset,
+      order: [[sortBy, sortOrder]],
       include: [
         {
           model: TutorPayroll,
@@ -36,57 +55,68 @@ exports.getAllTutorSalaries = async (req, res) => {
       ],
     });
 
-    const finalData = [];
+    /* --------------------------------
+       FETCH ALL TUTORS AT ONCE (OPTIMIZED)
+    --------------------------------- */
+    const tutorIds = salaries.map((s) => s.tutorId).filter(Boolean);
 
-    for (let salary of salaries) {
-      let tutorDetails = null;
+    const tutors = await SecondaryUser.findAll({
+      where: { id: tutorIds },
+      attributes: ["id", "fullname", "phone", "email"],
+      raw: true,
+    });
 
-      if (salary.tutorId) {
-        const tutor = await SecondaryUser.findOne({
-          where: { id: salary.tutorId },
-          attributes: ["fullname", "phone", "email"],
-        });
+    const tutorMap = {};
+    tutors.forEach((t) => {
+      tutorMap[t.id] = {
+        name: t.fullname,
+        phone: t.phone,
+        email: t.email,
+      };
+    });
 
-        tutorDetails = tutor
-          ? {
-              name: tutor.fullname,
-              phone: tutor.phone,
-              email: tutor.email,
-            }
-          : null;
-      }
+    /* --------------------------------
+       FINAL RESPONSE DATA
+    --------------------------------- */
+    const finalData = salaries.map((salary) => ({
+      salaryId: salary.id,
+      type: "TUTOR",
+      payrollMonth: salary.payrollMonth,
+      amount: salary.amount,
+      status: salary.status,
+      salaryDate: salary.salaryDate,
+      dueDate: salary.dueDate,
+      finalDueDate: salary.finalDueDate,
+      assignedTo: salary.assignedTo,
+      paidDate: salary.paidDate,
 
-      finalData.push({
-        salaryId: salary.id,
-        type: "TUTOR",
-        payrollMonth: salary.payrollMonth,
-        amount: salary.amount,
-        status: salary.status,
-        salaryDate: salary.salaryDate,
-        dueDate: salary.dueDate,
-        finalDueDate: salary.finalDueDate,
-        assignedTo: salary.assignedTo,
-        paidDate: salary.paidDate,
+      tutorId: salary.tutorId,
+      user: tutorMap[salary.tutorId] || {
+        name: "",
+        phone: "",
+        email: "",
+      },
 
-        tutorId: salary.tutorId,
-        user: tutorDetails || { name: "", phone: "", email: "" },
-
-        payroll: salary.payroll
-          ? {
-              totalClasses: salary.payroll.totalClasses,
-              attendedClasses: salary.payroll.attendedClasses,
-              missedClasses: salary.payroll.missedClasses,
-              baseSalary: salary.payroll.baseSalary,
-              grossSalary: salary.payroll.grossSalary,
-              netSalary: salary.payroll.netSalary,
-            }
-          : null,
-      });
-    }
+      payroll: salary.payroll
+        ? {
+            totalClasses: salary.payroll.totalClasses,
+            attendedClasses: salary.payroll.attendedClasses,
+            missedClasses: salary.payroll.missedClasses,
+            baseSalary: salary.payroll.baseSalary,
+            grossSalary: salary.payroll.grossSalary,
+            netSalary: salary.payroll.netSalary,
+          }
+        : null,
+    }));
 
     return res.status(200).json({
       success: true,
-      count: finalData.length,
+      pagination: {
+        page,
+        limit,
+        totalRecords: count,
+        totalPages: Math.ceil(count / limit),
+      },
       data: finalData,
     });
   } catch (error) {
@@ -268,7 +298,7 @@ exports.getNonAssignedTutorSalaries = async (req, res) => {
     };
 
     whereCondition.status = {
-      [Op.ne]: "Pending",
+      [Op.notIn]: ["Pending", "Paid"],
     };
 
     /* -------------------------------
