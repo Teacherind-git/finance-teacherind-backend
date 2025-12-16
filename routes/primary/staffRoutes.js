@@ -40,7 +40,11 @@ router.get("/", controller.getAllStaff);
 router.get("/tutors", controller.getAllTutors);
 router.get("/counselors", controller.getAllCounselors);
 router.get("/salary", salaryController.getAllSalaries);
-router.get("/salary/non-assigned", salaryController.getNonAssignedStaffSalaries);
+router.get(
+  "/salary/non-assigned",
+  salaryController.getNonAssignedStaffSalaries
+);
+router.get("/salary/receipt/:id", salaryController.downloadReceipt);
 router.get("/:id", controller.getStaff);
 
 // Delete

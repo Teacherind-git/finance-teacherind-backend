@@ -146,7 +146,6 @@ exports.getAllPayrolls = async (req, res) => {
   }
 };
 
-
 /**
  * GET payroll by ID
  */

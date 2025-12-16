@@ -12,6 +12,7 @@ router.get(
   salaryController.getAllTutorSalaries
 );
 router.get("/salary/non-assigned", salaryController.getNonAssignedTutorSalaries);
+router.get("/salary/receipt/:id", salaryController.downloadReceipt);
 //Update
 router.put(
   "/salary/assign",

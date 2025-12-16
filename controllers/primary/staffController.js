@@ -349,7 +349,6 @@ exports.getAllStaff = async (req, res) => {
   }
 };
 
-
 /* ================= GET ALL TUTORS ================= */
 exports.getAllTutors = async (req, res) => {
   try {
@@ -397,7 +396,6 @@ exports.getAllTutors = async (req, res) => {
     return res.status(500).json({ success: false, message: "Failed to fetch tutors" });
   }
 };
-
 
 /* ================= GET ALL COUNSELORS ================= */
 exports.getAllCounselors = async (req, res) => {

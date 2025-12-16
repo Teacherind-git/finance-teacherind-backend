@@ -4,7 +4,8 @@ const SecondaryUser = require("../../../models/secondary/User");
 const { Op } = require("sequelize");
 const StaffPayroll = require("../../../models/primary/StaffPayroll");
 const { getPaginationParams } = require("../../../utils/pagination");
-
+const puppeteer = require("puppeteer");
+const salarySlipTemplate = require("../../../templates/staffSalarySlipTemplate");
 
 // -----------------------------------------------------
 // 1. GET ALL SALARIES
@@ -29,21 +30,18 @@ exports.getAllSalaries = async (req, res) => {
     /* --------------------------------
        PAGINATION & SORTING
     --------------------------------- */
-    const {
-      page,
-      limit,
-      offset,
-      sortBy,
-      sortOrder,
-    } = getPaginationParams(req, [
-      "salaryDate",
-      "payrollMonth",
-      "amount",
-      "status",
-      "dueDate",
-      "finalDueDate",
-      "createdAt",
-    ]);
+    const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
+      req,
+      [
+        "salaryDate",
+        "payrollMonth",
+        "amount",
+        "status",
+        "dueDate",
+        "finalDueDate",
+        "createdAt",
+      ]
+    );
 
     const { rows: salaries, count } = await StaffSalary.findAndCountAll({
       where: whereCondition,
@@ -149,7 +147,6 @@ exports.getAllSalaries = async (req, res) => {
   }
 };
 
-
 // -----------------------------------------------------
 // 4. UPDATE STATUS (Finance)
 // -----------------------------------------------------
@@ -196,20 +193,118 @@ exports.downloadReceipt = async (req, res) => {
   try {
     const salaryId = req.params.id;
 
-    const salary = await StaffSalary.findByPk(salaryId);
+    /* --------------------------------
+       FETCH SALARY WITH PAYROLL
+    --------------------------------- */
+    const salary = await StaffSalary.findOne({
+      where: {
+        id: salaryId,
+        isDeleted: false,
+        status: "Paid", // optional safety
+      },
+      include: [
+        {
+          model: StaffPayroll,
+          as: "payroll",
+        },
+      ],
+    });
 
     if (!salary) {
-      return res.status(404).json({ message: "Salary not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Salary record not found",
+      });
     }
 
-    //const filePath = await generateSalaryReceipt(salary);
+    /* --------------------------------
+       FETCH USER DETAILS
+    --------------------------------- */
+    let user = null;
 
-    return res.download(`salary_receipt_${salaryId}.pdf`);
+    if (salary.type === "STAFF" && salary.staffId) {
+      user = await Staff.findByPk(salary.staffId, {
+        attributes: ["fullName", "id"],
+      });
+    }
+
+    if (salary.type === "COUNSELOR" && salary.counselorId) {
+      user = await SecondaryUser.findByPk(salary.counselorId, {
+        attributes: ["fullname", "id"],
+      });
+    }
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Employee not found",
+      });
+    }
+
+    /* --------------------------------
+       BUILD SALARY SLIP DATA
+    --------------------------------- */
+    const payroll = salary.payroll;
+
+    const { start, end } = getMonthStartAndEnd(payroll.payrollMonth);
+
+    const data = {
+      payPeriod: `${formatDate(start)} to ${formatDate(end)}`,
+      payDate: formatDate(salary.paidDate),
+      employeeName: salary.type === "STAFF" ? user.fullName : user.fullname,
+      employeeId: salary.type === "STAFF" ? `EMP-${user.id}` : `CNS-${user.id}`,
+      position: salary.type,
+      month: payroll.payrollMonth
+        ? new Date(payroll.payrollMonth)?.toLocaleDateString("en-GB", {
+            month: "long",
+            year: "numeric",
+          })
+        : "",
+      baseSalary: payroll.baseSalary || salary.amount,
+      bonus: payroll.bonus || 0,
+      totalDeductions: payroll.totalDeductions || 0,
+      grossSalary: payroll.grossSalary || salary.amount,
+      gstPercent: payroll.gstPercent || 0,
+      gstAmount: payroll.gstAmount || 0,
+      netPay: salary.amount,
+    };
+
+    /* --------------------------------
+       GENERATE PDF
+    --------------------------------- */
+    const html = salarySlipTemplate(data);
+
+    const browser = await puppeteer.launch({
+      headless: "new",
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: "networkidle0" });
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "20px", bottom: "20px" },
+    });
+
+    await browser.close();
+
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename=salary-slip-${data.employeeId}.pdf`,
+      "Content-Length": pdfBuffer.length,
+    });
+
+    res.send(pdfBuffer);
   } catch (error) {
-    console.log("DOWNLOAD RECEIPT ERROR:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("DOWNLOAD RECEIPT ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate salary slip",
+    });
   }
 };
+
 /* -----------------------------------------------------
    4. UPDATE ASSIGNED_TO STATUS (Finance)
 ----------------------------------------------------- */
@@ -385,3 +480,23 @@ exports.getNonAssignedStaffSalaries = async (req, res) => {
     });
   }
 };
+
+const getMonthStartAndEnd = (date) => {
+  const start = new Date(date);
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(start);
+  end.setMonth(end.getMonth() + 1);
+  end.setDate(0);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+};
+
+const formatDate = (date) =>
+  date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });

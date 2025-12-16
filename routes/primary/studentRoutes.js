@@ -38,6 +38,11 @@ router.get(
   studentController.getStudent
 );
 router.get(
+  "/receipt/:id",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  studentBillController.downloadReceipt
+);
+router.get(
   "/invoice/:studentId",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   studentBillController.generateInvoicePdf

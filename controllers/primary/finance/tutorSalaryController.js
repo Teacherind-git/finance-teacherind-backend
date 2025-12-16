@@ -3,8 +3,9 @@ const TutorPayroll = require("../../../models/primary/TutorPayroll");
 const SecondaryUser = require("../../../models/secondary/User");
 const { getPaginationParams } = require("../../../utils/pagination");
 const { Op } = require("sequelize");
+const puppeteer = require("puppeteer");
+const salarySlipTemplate = require("../../../templates/tutorSalarySlipTemplate");
 
-// const { generateSalaryReceipt } = require("../utils/pdfGenerator");
 
 /* -----------------------------------------------------
    1. GET ALL TUTOR SALARIES
@@ -171,11 +172,19 @@ exports.updateTutorSalaryStatus = async (req, res) => {
 /* -----------------------------------------------------
    3. GENERATE / DOWNLOAD SALARY RECEIPT (Finance)
 ----------------------------------------------------- */
-exports.downloadTutorSalaryReceipt = async (req, res) => {
+exports.downloadReceipt = async (req, res) => {
   try {
     const salaryId = req.params.id;
 
-    const salary = await TutorSalary.findByPk(salaryId, {
+    /* --------------------------------
+       FETCH SALARY + PAYROLL
+    --------------------------------- */
+    const salary = await TutorSalary.findOne({
+      where: {
+        id: salaryId,
+        isDeleted: false,
+        status: "Paid", // optional safety
+      },
       include: [
         {
           model: TutorPayroll,
@@ -185,46 +194,99 @@ exports.downloadTutorSalaryReceipt = async (req, res) => {
     });
 
     if (!salary) {
-      return res.status(404).json({ message: "Tutor salary not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Tutor salary not found",
+      });
     }
 
-    /* 
-      🔹 PDF generation hook (future)
-      const filePath = await generateSalaryReceipt({
-        salary,
-        payroll: salary.payroll,
-        tutorId: salary.tutorId,
-      });
-      return res.download(filePath);
-    */
-
-    // Temporary response until PDF is added
-    return res.status(200).json({
-      success: true,
-      message: "Salary receipt ready",
-      data: {
-        receiptNo: `TUTOR-SAL-${salary.id}`,
-        tutorId: salary.tutorId,
-        payrollMonth: salary.payrollMonth,
-        amount: salary.amount,
-        status: salary.status,
-
-        breakdown: salary.payroll
-          ? {
-              baseSalary: salary.payroll.baseSalary,
-              earnings: salary.payroll.earnings,
-              deductions: salary.payroll.deductions,
-              grossSalary: salary.payroll.grossSalary,
-              netSalary: salary.payroll.netSalary,
-            }
-          : null,
-
-        generatedAt: new Date(),
-      },
+    /* --------------------------------
+       FETCH TUTOR
+    --------------------------------- */
+    const tutor = await SecondaryUser.findByPk(salary.tutorId, {
+      attributes: ["id", "fullname"],
     });
+
+    if (!tutor) {
+      return res.status(404).json({
+        success: false,
+        message: "Tutor not found",
+      });
+    }
+
+    /* --------------------------------
+       FORMAT MONTH (ONLY)
+    --------------------------------- */
+    const month = salary.payrollMonth
+      ? new Date(salary.payrollMonth).toLocaleDateString("en-GB", {
+          month: "long",
+          year: "numeric",
+        })
+      : "";
+
+    /* --------------------------------
+       BUILD SALARY SLIP DATA
+    --------------------------------- */
+    const data = {
+      payPeriod: "", // optional if not required
+      payDate: salary.paidDate,
+
+      employeeName: tutor.fullname,
+      employeeId: `TUTOR-${tutor.id}`,
+      position: "Tutor",
+
+      // ✅ derived from payrollMonth
+      month,
+
+      totalClasses: salary.payroll?.totalClasses || 0,
+      ratePerClass: 0, // if applicable later
+      baseSalary: salary.payroll?.baseSalary || salary.amount,
+
+      bonus: 0,
+      lateDeduction: 0,
+      leaveDeduction: 0,
+      otherDeduction: 0,
+
+      totalDeductions: 0,
+
+      grossSalary: salary.payroll?.grossSalary || salary.amount,
+      gstPercent: 0,
+      gstAmount: 0,
+
+      netPay: salary.payroll?.netSalary || salary.amount,
+    };
+
+    /* --------------------------------
+       GENERATE PDF
+    --------------------------------- */
+    const html = salarySlipTemplate(data);
+
+    const browser = await puppeteer.launch({ headless: "new" });
+    const page = await browser.newPage();
+
+    await page.setContent(html, { waitUntil: "networkidle0" });
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "20px", bottom: "20px" },
+    });
+
+    await browser.close();
+
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename=tutor-salary-slip-${tutor.id}.pdf`,
+      "Content-Length": pdfBuffer.length,
+    });
+
+    res.send(pdfBuffer);
   } catch (error) {
-    console.log("DOWNLOAD TUTOR RECEIPT ERROR:", error);
-    res.status(500).json({ message: "Internal server error" });
+    console.error("DOWNLOAD TUTOR RECEIPT ERROR:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate tutor salary slip",
+    });
   }
 };
 

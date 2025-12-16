@@ -6,11 +6,12 @@ const ClassRange = require("../../../models/primary/ClassRange");
 const Subject = require("../../../models/primary/Subject");
 const Package = require("../../../models/primary/Package");
 const logger = require("../../../utils/logger");
-const { getInvoiceData } = require("../../../services/invoiceService");
 const invoiceTemplate = require("../../../templates/invoiceTemplate");
 const { getPaginationParams } = require("../../../utils/pagination");
 const { Op } = require("sequelize");
 const moment = require("moment");
+const receiptTemplate = require("../../../templates/billReceiptTemplate");
+const { toWords } = require("number-to-words");
 
 exports.getStudentBills = async (req, res) => {
   try {
@@ -166,6 +167,118 @@ exports.generateInvoicePdf = async (req, res) => {
   }
 };
 
+exports.downloadReceipt = async (req, res) => {
+  try {
+    const billId = req.params.id;
+
+    /* --------------------------------
+       FETCH BILL WITH STUDENT DETAILS
+    --------------------------------- */
+    const bill = await StudentBill.findOne({
+      where: {
+        id: billId,
+        isDeleted: false,
+      },
+      include: [
+        {
+          model: Student,
+          attributes: ["id", "name", "contact"],
+          include: [
+            {
+              model: StudentDetail,
+              as: "details",
+              attributes: [
+                "packagePrice",
+                "discount",
+                "totalPrice",
+                "startDate",
+              ],
+              include: [
+                {
+                  model: Package,
+                  as: "package",
+                  attributes: ["name"],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!bill) {
+      return res.status(404).json({
+        success: false,
+        message: "Student bill not found",
+      });
+    }
+
+    const student = bill.student;
+    /* --------------------------------
+       AMOUNT IN WORDS
+    --------------------------------- */
+    const amountInWords = toWords(bill.amount); // use your util
+
+    /* --------------------------------
+       BUILD RECEIPT DATA (ORIGINAL)
+    --------------------------------- */
+    const data = {
+    
+      paymentNumber: bill.invoiceId,
+      paymentDate: formatDate(bill.billDate),
+      paymentMode: "Bank", // or bill.paymentMode if exists
+
+      studentName: student.name,
+      totalAmount: bill.amount,
+      amountInWords,
+
+      items: [
+        {
+          invoiceNumber: bill.invoiceId,
+          invoiceDate: formatDate(bill.billDate),
+          invoiceAmount: bill.amount,
+          paymentAmount: bill.amount,
+          tds: 0,
+          balance: 0,
+        },
+      ],
+    };
+
+    /* --------------------------------
+       GENERATE PDF
+    --------------------------------- */
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    });
+
+    const page = await browser.newPage();
+    await page.setContent(receiptTemplate(data), {
+      waitUntil: "networkidle0",
+    });
+
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+    });
+
+    await browser.close();
+
+    res.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename=student-receipt-${bill.invoiceId}.pdf`,
+    });
+
+    res.send(pdf);
+  } catch (err) {
+    console.error("DOWNLOAD RECEIPT ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate bill",
+    });
+  }
+};
+
 exports.getStudentBillsSummary = async (req, res) => {
   try {
     logger.info("Get global student bills summary API called", {
@@ -253,4 +366,102 @@ exports.getStudentBillsSummary = async (req, res) => {
   }
 };
 
+const getInvoiceData = async (studentId) => {
+  const bill = await StudentBill.findOne({
+    where: {
+      studentId,
+      isDeleted: false,
+    },
+    include: [
+      {
+        model: Student,
+        attributes: ["name", "contact"],
+        include: [
+          {
+            model: StudentDetail,
+            as: "details",
+            attributes: ["startDate", "packagePrice", "discount", "totalPrice"],
+            include: [
+              {
+                model: Package,
+                as: "package",
+                attributes: ["id", "name"],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    order: [["billDate", "DESC"]],
+  });
 
+  if (!bill) return null;
+
+  const student = bill.student;
+
+  /**
+   * 1️⃣ Find ALL active packages for bill date
+   */
+  const activeDetails = student.details.filter(
+    (d) => d.package && isSameMonth(d.startDate, bill.billDate)
+  );
+
+  /**
+   * 2️⃣ Convert packages into invoice items
+   */
+  const items = activeDetails.map((detail, index) => {
+    return {
+      name: detail.package.name,
+      sac: "999299",
+      qty: "1 MON",
+      rate: detail.packagePrice,
+      discount: detail.discount,
+      amount: detail.totalPrice,
+    };
+  });
+
+  const subtotal = items.reduce((sum, i) => sum + i.amount, 0);
+  const totalDiscount = items.reduce((sum, item) => sum + item.discount, 0);
+
+  return {
+    invoiceNo: bill.invoiceId,
+    invoiceDate: formatDate(bill.billDate),
+    dueDate: formatDate(bill.dueDate || bill.billDate),
+
+    student: {
+      name: student.name,
+      mobile: student.contact || "-",
+    },
+
+    items,
+
+    subtotal,
+    totalDiscount,
+    receivedAmount: bill.paidAmount || 0,
+
+    amountInWords: toWords(subtotal),
+
+    bank: {
+      name: "teacherInd Loro Talento Pvt Ltd",
+      account: "25150200002750",
+      ifsc: "FDRL0002515",
+      branch: "Federal Bank, Kizhissery",
+    },
+  };
+};
+
+const isSameMonth = (startDate, billDate) => {
+  const s = new Date(startDate);
+  const b = new Date(billDate);
+
+  return s.getFullYear() === b.getFullYear() && s.getMonth() === b.getMonth();
+};
+
+const formatDate = (date) => {
+  if (!date) return "";
+  return new Date(date).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};

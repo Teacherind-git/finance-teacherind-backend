@@ -45,6 +45,7 @@ app.use(requestLogger);
 
 /* ---------------- Static files ---------------- */
 app.use("/uploads", express.static("public/uploads"));
+app.use("/public", express.static("public"));
 
 /* ---------------- Routes ---------------- */
 app.use("/api/auth", authRoutes);

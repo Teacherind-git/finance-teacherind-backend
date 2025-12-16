@@ -2,213 +2,186 @@ module.exports = (data) => `
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8" />
-<style>
-  body {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 12px;
-    color: #000;
-    margin: 25px 30px;
-  }
+  <meta charset="UTF-8" />
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      color: #000;
+      margin: 20px;
+    }
 
-  /* ---------------- HEADER ---------------- */
-  .header {
-    text-align: center;
-    border-bottom: 2px solid #000;
-    padding-bottom: 10px;
-    margin-bottom: 20px;
-  }
+    .container {
+      border: 2px solid #000;
+      padding: 20px;
+    }
 
-  .company-name {
-    font-size: 18px;
-    font-weight: bold;
-  }
+    .header {
+      display: flex;
+      gap: 15px;
+    }
 
-  .company-info {
-    margin-top: 4px;
-    line-height: 1.4;
-  }
+    .logo img {
+      width: 90px;
+    }
 
-  /* ---------------- INVOICE INFO ---------------- */
-  .info-row {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 15px;
-  }
+    .company-details {
+      flex: 1;
+    }
 
-  .info-box {
-    width: 48%;
-    line-height: 1.6;
-  }
+    .company-name {
+      font-size: 18px;
+      font-weight: bold;
+      color: #c40000;
+    }
 
-  .right {
-    text-align: right;
-  }
+    .invoice-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 15px;
+    }
 
-  .label {
-    font-weight: bold;
-  }
+    .bill-to {
+      margin-top: 20px;
+    }
 
-  /* ---------------- TABLE ---------------- */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-  }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
 
-  th, td {
-    border: 1.5px solid #000;
-    padding: 6px;
-    font-size: 12px;
-  }
+    th, td {
+      border: 1px solid #000;
+      padding: 6px;
+    }
 
-  th {
-    background: #e6e6e6;
-    text-align: center;
-    font-weight: bold;
-  }
+    th {
+      background: #f0f0f0;
+      text-align: center;
+    }
 
-  td {
-    vertical-align: top;
-  }
+    .right {
+      text-align: right;
+    }
 
-  .text-right {
-    text-align: right;
-  }
+    .bank-box {
+      margin-top: 15px;
+      border: 1px solid #000;
+      padding: 10px;
+    }
 
-  .service {
-    font-weight: bold;
-  }
+    .footer {
+      margin-top: 25px;
+      display: flex;
+      justify-content: space-between;
+    }
 
-  /* ---------------- TOTALS ---------------- */
-  .totals {
-    width: 55%;
-    float: right;
-    margin-top: 8px;
-  }
-
-  .totals th {
-    background: #f0f0f0;
-    text-align: left;
-  }
-
-  /* ---------------- FOOTER ---------------- */
-  .footer {
-    clear: both;
-    margin-top: 30px;
-    font-size: 12px;
-    line-height: 1.6;
-  }
-
-  .footer-title {
-    font-weight: bold;
-    margin-top: 12px;
-  }
-
-  .signatory {
-    margin-top: 35px;
-    font-weight: bold;
-  }
-
-  .note {
-    margin-top: 20px;
-    text-align: center;
-    font-size: 11px;
-    font-weight: bold;
-  }
-</style>
+    .sign {
+      text-align: right;
+    }
+  </style>
 </head>
 
 <body>
+  <div class="container">
 
-<!-- HEADER -->
-<div class="header">
-  <div class="company-name">${data.company.name}</div>
-  <div class="company-info">
-    ${data.company.address}<br/>
-    Mobile: ${data.company.phone} &nbsp; PAN Number: ${data.company.pan}<br/>
-    Email: ${data.company.email} &nbsp; Website: ${data.company.website}
+    <!-- HEADER -->
+    <div class="header">
+      <div class="logo">
+        <img src="http://localhost:5000/public/logo/logo.png" />
+      </div>
+      <div class="company-details">
+        <div class="company-name">teacherInd Loro Talento Pvt Ltd.</div>
+        <div>teacherInd Tower, pulpatta (po), Malappuram, Kerala, 673641</div>
+        <div>Mobile: 7907361068 &nbsp; PAN Number: AALCT6766C</div>
+        <div>Email: teacherindedu@gmail.com</div>
+        <div>Website: www.teacherind.com</div>
+      </div>
+    </div>
+
+    <!-- INVOICE META -->
+    <div class="invoice-meta">
+      <div>
+        <strong>Invoice No.:</strong> ${data.invoiceNo}
+      </div>
+      <div>
+        <strong>Invoice Date:</strong> ${data.invoiceDate}<br/>
+        <strong>Due Date:</strong> ${data.dueDate}
+      </div>
+    </div>
+
+    <!-- BILL TO -->
+    <div class="bill-to">
+      <strong>BILL TO</strong><br/>
+      ${data.student.name}<br/>
+      Mobile: ${data.student.mobile ?? "-"}
+    </div>
+
+    <!-- SERVICES TABLE -->
+    <table>
+      <tr>
+        <th>SERVICES</th>
+        <th>SAC</th>
+        <th>QTY</th>
+        <th>RATE</th>
+        <th>DISC.</th>
+        <th>AMOUNT</th>
+      </tr>
+
+      ${data.items
+        ?.map(
+          (i) => `
+        <tr>
+          <td>${i.name}</td>
+          <td>${i.sac}</td>
+          <td>${i.qty}</td>
+          <td class="right">${i.rate}</td>
+          <td class="right">${i.discount}</td>
+          <td class="right">${i.amount}</td>
+        </tr>
+      `
+        )
+        .join("")}
+
+      <tr>
+        <th colspan="4" class="right">SUBTOTAL</th>
+        <th class="right">${data.totalDiscount}</th>
+        <th class="right">₹ ${data.subtotal}</th>
+      </tr>
+    </table>
+
+    <!-- BANK DETAILS -->
+    <div class="bank-box">
+      <strong>BANK DETAILS</strong><br/><br/>
+      Name: teacherInd Loro Talento Pvt Ltd<br/>
+      IFSC Code: FDRL0002515<br/>
+      Account No: 25150200002750<br/>
+      Bank: Federal Bank, Kizhissery
+    </div>
+
+    <!-- TOTALS -->
+    <table>
+      <tr>
+        <td>Total Amount</td>
+        <td class="right">₹ ${data.subtotal}</td>
+      </tr>
+    </table>
+
+    <p><strong>Total Amount (in words)</strong><br/>
+      ${data.amountInWords}
+    </p>
+
+    <!-- FOOTER -->
+    <div class="footer">
+      <div>BILL OF SUPPLY ORIGINAL FOR RECIPIENT</div>
+      <div class="sign">
+        <strong>AUTHORISED SIGNATORY FOR</strong><br/>
+        teacherInd Loro Talento Pvt Ltd.
+      </div>
+    </div>
+
   </div>
-</div>
-
-<!-- INVOICE INFO -->
-<div class="info-row">
-  <div class="info-box">
-    <span class="label">BILL TO</span><br/>
-    ${data.student.code} ${data.student.name}<br/>
-    Mobile: ${data.student.mobile}
-  </div>
-
-  <div class="info-box right">
-    <span class="label">Invoice No.:</span> ${data.invoiceNo}<br/>
-    <span class="label">Invoice Date:</span> ${data.invoiceDate}<br/>
-    <span class="label">Due Date:</span> ${data.dueDate}
-  </div>
-</div>
-
-<!-- SERVICES TABLE -->
-<table>
-  <thead>
-    <tr>
-      <th>SERVICES</th>
-      <th>SAC</th>
-      <th>QTY</th>
-      <th>RATE</th>
-      <th>DISC.</th>
-      <th>AMOUNT</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${data.items.map(i => `
-    <tr>
-      <td class="service">${i.name}</td>
-      <td class="text-right">${i.sac}</td>
-      <td class="text-right">${i.qty}</td>
-      <td class="text-right">₹ ${i.rate}</td>
-      <td class="text-right">₹ ${i.discount}</td>
-      <td class="text-right">₹ ${i.amount}</td>
-    </tr>
-    `).join("")}
-  </tbody>
-</table>
-
-<!-- TOTALS -->
-<table class="totals">
-  <tr>
-    <th>SUBTOTAL</th>
-    <td class="text-right">₹ ${data.subtotal}</td>
-  </tr>
-  <tr>
-    <th>Received Amount</th>
-    <td class="text-right">₹ ${data.receivedAmount}</td>
-  </tr>
-  <tr>
-    <th>Total Amount</th>
-    <td class="text-right"><strong>₹ ${data.total}</strong></td>
-  </tr>
-</table>
-
-<!-- FOOTER -->
-<div class="footer">
-  <div class="footer-title">BANK DETAILS</div>
-  Name: ${data.bank.name}<br/>
-  IFSC Code: ${data.bank.ifsc}<br/>
-  Account No: ${data.bank.account}<br/>
-  Bank: ${data.bank.branch}<br/><br/>
-
-  <div class="footer-title">Total Amount (in words)</div>
-  ${data.totalWords}
-
-  <div class="signatory">
-    AUTHORISED SIGNATORY FOR<br/>
-    ${data.company.name}
-  </div>
-</div>
-
-<div class="note">
-  BILL OF SUPPLY ORIGINAL FOR RECIPIENT
-</div>
-
 </body>
 </html>
 `;
