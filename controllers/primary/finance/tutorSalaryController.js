@@ -5,7 +5,7 @@ const { getPaginationParams } = require("../../../utils/pagination");
 const { Op } = require("sequelize");
 const puppeteer = require("puppeteer");
 const salarySlipTemplate = require("../../../templates/tutorSalarySlipTemplate");
-
+const logger = require("../../../utils/logger"); // ✅ central logger
 
 /* -----------------------------------------------------
    1. GET ALL TUTOR SALARIES
@@ -14,22 +14,13 @@ exports.getAllTutorSalaries = async (req, res) => {
   try {
     const whereCondition = { isDeleted: false };
 
-    /* --------------------------------
-       DEPARTMENT BASED STATUS FILTER
-    --------------------------------- */
     if (req.user?.department === "HR") {
       whereCondition.status = "Pending";
     }
-
     if (req.user?.department === "Finance") {
-      whereCondition.status = {
-        [Op.ne]: "Pending",
-      };
+      whereCondition.status = { [Op.ne]: "Pending" };
     }
 
-    /* --------------------------------
-       PAGINATION & SORTING
-    --------------------------------- */
     const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
       req,
       [
@@ -48,17 +39,9 @@ exports.getAllTutorSalaries = async (req, res) => {
       limit,
       offset,
       order: [[sortBy, sortOrder]],
-      include: [
-        {
-          model: TutorPayroll,
-          as: "payroll",
-        },
-      ],
+      include: [{ model: TutorPayroll, as: "payroll" }],
     });
 
-    /* --------------------------------
-       FETCH ALL TUTORS AT ONCE (OPTIMIZED)
-    --------------------------------- */
     const tutorIds = salaries.map((s) => s.tutorId).filter(Boolean);
 
     const tutors = await SecondaryUser.findAll({
@@ -69,16 +52,9 @@ exports.getAllTutorSalaries = async (req, res) => {
 
     const tutorMap = {};
     tutors.forEach((t) => {
-      tutorMap[t.id] = {
-        name: t.fullname,
-        phone: t.phone,
-        email: t.email,
-      };
+      tutorMap[t.id] = { name: t.fullname, phone: t.phone, email: t.email };
     });
 
-    /* --------------------------------
-       FINAL RESPONSE DATA
-    --------------------------------- */
     const finalData = salaries.map((salary) => ({
       salaryId: salary.id,
       type: "TUTOR",
@@ -90,14 +66,8 @@ exports.getAllTutorSalaries = async (req, res) => {
       finalDueDate: salary.finalDueDate,
       assignedTo: salary.assignedTo,
       paidDate: salary.paidDate,
-
       tutorId: salary.tutorId,
-      user: tutorMap[salary.tutorId] || {
-        name: "",
-        phone: "",
-        email: "",
-      },
-
+      user: tutorMap[salary.tutorId] || { name: "", phone: "", email: "" },
       payroll: salary.payroll
         ? {
             totalClasses: salary.payroll.totalClasses,
@@ -121,7 +91,10 @@ exports.getAllTutorSalaries = async (req, res) => {
       data: finalData,
     });
   } catch (error) {
-    console.log("GET TUTOR SALARY LIST ERROR:", error);
+    logger.error("GET TUTOR SALARY LIST ERROR", {
+      message: error.message,
+      stack: error.stack,
+    });
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -147,24 +120,19 @@ exports.updateTutorSalaryStatus = async (req, res) => {
     salary.status = status;
     salary.updatedBy = req.user?.id || null;
 
-    // ✅ set paidDate only when status = Paid
-    if (status === "Paid") {
-      salary.paidDate = new Date();
-    }
-
-    // Optional: clear paidDate if status changes from Paid
-    if (status !== "Paid") {
-      salary.paidDate = null;
-    }
+    if (status === "Paid") salary.paidDate = new Date();
+    if (status !== "Paid") salary.paidDate = null;
 
     await salary.save();
 
-    res.status(200).json({
-      success: true,
-      message: "Tutor salary status updated",
-    });
+    res
+      .status(200)
+      .json({ success: true, message: "Tutor salary status updated" });
   } catch (error) {
-    console.log("UPDATE TUTOR SALARY STATUS ERROR:", error);
+    logger.error("UPDATE TUTOR SALARY STATUS ERROR", {
+      message: error.message,
+      stack: error.stack,
+    });
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -176,47 +144,27 @@ exports.downloadReceipt = async (req, res) => {
   try {
     const salaryId = req.params.id;
 
-    /* --------------------------------
-       FETCH SALARY + PAYROLL
-    --------------------------------- */
     const salary = await TutorSalary.findOne({
-      where: {
-        id: salaryId,
-        isDeleted: false,
-        status: "Paid", // optional safety
-      },
-      include: [
-        {
-          model: TutorPayroll,
-          as: "payroll",
-        },
-      ],
+      where: { id: salaryId, isDeleted: false, status: "Paid" },
+      include: [{ model: TutorPayroll, as: "payroll" }],
     });
 
     if (!salary) {
-      return res.status(404).json({
-        success: false,
-        message: "Tutor salary not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Tutor salary not found" });
     }
 
-    /* --------------------------------
-       FETCH TUTOR
-    --------------------------------- */
     const tutor = await SecondaryUser.findByPk(salary.tutorId, {
       attributes: ["id", "fullname"],
     });
 
     if (!tutor) {
-      return res.status(404).json({
-        success: false,
-        message: "Tutor not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Tutor not found" });
     }
 
-    /* --------------------------------
-       FORMAT MONTH (ONLY)
-    --------------------------------- */
     const month = salary.payrollMonth
       ? new Date(salary.payrollMonth).toLocaleDateString("en-GB", {
           month: "long",
@@ -224,46 +172,31 @@ exports.downloadReceipt = async (req, res) => {
         })
       : "";
 
-    /* --------------------------------
-       BUILD SALARY SLIP DATA
-    --------------------------------- */
     const data = {
-      payPeriod: "", // optional if not required
+      payPeriod: "",
       payDate: salary.paidDate,
-
       employeeName: tutor.fullname,
       employeeId: `TUTOR-${tutor.id}`,
       position: "Tutor",
-
-      // ✅ derived from payrollMonth
       month,
-
       totalClasses: salary.payroll?.totalClasses || 0,
-      ratePerClass: 0, // if applicable later
+      ratePerClass: 0,
       baseSalary: salary.payroll?.baseSalary || salary.amount,
-
       bonus: 0,
       lateDeduction: 0,
       leaveDeduction: 0,
       otherDeduction: 0,
-
       totalDeductions: 0,
-
       grossSalary: salary.payroll?.grossSalary || salary.amount,
       gstPercent: 0,
       gstAmount: 0,
-
       netPay: salary.payroll?.netSalary || salary.amount,
     };
 
-    /* --------------------------------
-       GENERATE PDF
-    --------------------------------- */
     const html = salarySlipTemplate(data);
 
     const browser = await puppeteer.launch({ headless: "new" });
     const page = await browser.newPage();
-
     await page.setContent(html, { waitUntil: "networkidle0" });
 
     const pdfBuffer = await page.pdf({
@@ -282,11 +215,16 @@ exports.downloadReceipt = async (req, res) => {
 
     res.send(pdfBuffer);
   } catch (error) {
-    console.error("DOWNLOAD TUTOR RECEIPT ERROR:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to generate tutor salary slip",
+    logger.error("DOWNLOAD TUTOR RECEIPT ERROR", {
+      message: error.message,
+      stack: error.stack,
     });
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Failed to generate tutor salary slip",
+      });
   }
 };
 
@@ -297,43 +235,28 @@ exports.assignTutorSalaries = async (req, res) => {
   try {
     const { salaryIds, assignedTo } = req.body;
 
-    if (!Array.isArray(salaryIds) || salaryIds.length === 0) {
-      return res.status(400).json({
-        message: "salaryIds must be a non-empty array",
-      });
+    if (!Array.isArray(salaryIds) || !salaryIds.length) {
+      return res
+        .status(400)
+        .json({ message: "salaryIds must be a non-empty array" });
     }
-
     if (!assignedTo) {
-      return res.status(400).json({
-        message: "assignId is required",
-      });
+      return res.status(400).json({ message: "assignId is required" });
     }
 
-    // fetch only unassigned salaries
     const salaries = await TutorSalary.findAll({
-      where: {
-        id: { [Op.in]: salaryIds },
-        assignedTo: 16,
-      },
+      where: { id: { [Op.in]: salaryIds }, assignedTo: 16 },
     });
 
     if (!salaries.length) {
-      return res.status(400).json({
-        message: "No eligible tutor salaries found for assignment",
-      });
+      return res
+        .status(400)
+        .json({ message: "No eligible tutor salaries found for assignment" });
     }
 
     await TutorSalary.update(
-      {
-        assignedTo,
-        assignDate: new Date(),
-        updatedBy: req.user?.id || null,
-      },
-      {
-        where: {
-          id: { [Op.in]: salaries.map((s) => s.id) },
-        },
-      }
+      { assignedTo, assignDate: new Date(), updatedBy: req.user?.id || null },
+      { where: { id: { [Op.in]: salaries.map((s) => s.id) } } }
     );
 
     return res.status(200).json({
@@ -342,7 +265,10 @@ exports.assignTutorSalaries = async (req, res) => {
       assignedCount: salaries.length,
     });
   } catch (error) {
-    console.error("BULK ASSIGN TUTOR SALARIES ERROR:", error);
+    logger.error("BULK ASSIGN TUTOR SALARIES ERROR", {
+      message: error.message,
+      stack: error.stack,
+    });
     return res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -354,54 +280,25 @@ exports.getNonAssignedTutorSalaries = async (req, res) => {
   try {
     const { minAmount, maxAmount, fromDate, toDate } = req.query;
 
-    const whereCondition = {
-      isDeleted: false,
-      assignedTo: 16, // 👈 FIXED assignedTo filter
-    };
+    const whereCondition = { isDeleted: false, assignedTo: 16 };
+    whereCondition.status = { [Op.notIn]: ["Pending", "Paid"] };
 
-    whereCondition.status = {
-      [Op.notIn]: ["Pending", "Paid"],
-    };
-
-    /* -------------------------------
-       AMOUNT RANGE FILTER
-    -------------------------------- */
     if (minAmount || maxAmount) {
       whereCondition.amount = {};
-
-      if (minAmount) {
-        whereCondition.amount[Op.gte] = Number(minAmount);
-      }
-
-      if (maxAmount) {
-        whereCondition.amount[Op.lte] = Number(maxAmount);
-      }
+      if (minAmount) whereCondition.amount[Op.gte] = Number(minAmount);
+      if (maxAmount) whereCondition.amount[Op.lte] = Number(maxAmount);
     }
 
-    /* -------------------------------
-       DATE RANGE FILTER (createdAt)
-    -------------------------------- */
     if (fromDate || toDate) {
       whereCondition.createdAt = {};
-
-      if (fromDate) {
-        whereCondition.createdAt[Op.gte] = new Date(fromDate);
-      }
-
-      if (toDate) {
-        whereCondition.createdAt[Op.lte] = new Date(toDate);
-      }
+      if (fromDate) whereCondition.createdAt[Op.gte] = new Date(fromDate);
+      if (toDate) whereCondition.createdAt[Op.lte] = new Date(toDate);
     }
 
     const salaries = await TutorSalary.findAll({
       where: whereCondition,
       order: [["createdAt", "DESC"]],
-      include: [
-        {
-          model: TutorPayroll,
-          as: "payroll",
-        },
-      ],
+      include: [{ model: TutorPayroll, as: "payroll" }],
     });
 
     const finalData = [];
@@ -416,11 +313,7 @@ exports.getNonAssignedTutorSalaries = async (req, res) => {
         });
 
         tutorDetails = tutor
-          ? {
-              name: tutor.fullname,
-              phone: tutor.phone,
-              email: tutor.email,
-            }
+          ? { name: tutor.fullname, phone: tutor.phone, email: tutor.email }
           : null;
       }
 
@@ -449,17 +342,20 @@ exports.getNonAssignedTutorSalaries = async (req, res) => {
       });
     }
 
-    return res.status(200).json({
-      success: true,
-      count: finalData.length,
-      data: finalData,
-    });
+    return res
+      .status(200)
+      .json({ success: true, count: finalData.length, data: finalData });
   } catch (error) {
-    console.log("GET ASSIGNED TUTOR SALARY ERROR:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-      error: error.message,
+    logger.error("GET ASSIGNED TUTOR SALARY ERROR", {
+      message: error.message,
+      stack: error.stack,
     });
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "Internal server error",
+        error: error.message,
+      });
   }
 };

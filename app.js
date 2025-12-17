@@ -1,14 +1,14 @@
 const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
-const { connectDBs } = require("./config/db");
+const { connectDBs, sequelizePrimary } = require("./config/db");
 
 // Logger
 const requestLogger = require("./middlewares/requestLogger");
 const errorHandler = require("./middlewares/errorHandler");
 const logger = require("./utils/logger");
 
-// Routes
+// Routes (unchanged)
 const authRoutes = require("./routes/primary/authRoutes");
 const userRoutes = require("./routes/primary/userRoutes");
 const classRoutes = require("./routes/primary/classRoutes");
@@ -25,7 +25,6 @@ const tutorRoutes = require("./routes/primary/tutorSalary");
 const financeRoutes = require("./routes/primary/financeRoutes");
 
 dotenv.config();
-connectDBs();
 
 const app = express();
 
@@ -41,10 +40,10 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-/* ✅ Request logging (BEFORE routes) */
+/* ---------------- Logger ---------------- */
 app.use(requestLogger);
 
-/* ---------------- Static files ---------------- */
+/* ---------------- Static ---------------- */
 app.use("/uploads", express.static("public/uploads"));
 app.use("/public", express.static("public"));
 
@@ -64,10 +63,36 @@ app.use("/api/expense", expenseRoutes);
 app.use("/api/tutor", tutorRoutes);
 app.use("/api/finance", financeRoutes);
 
-/* ✅ Error handler (ALWAYS LAST) */
+/* ---------------- Error Handler ---------------- */
 app.use(errorHandler);
 
+/* ================= SERVER START ================= */
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  logger.info(`✅ Server running on port ${PORT}`);
-});
+
+(async () => {
+  try {
+    // 1️⃣ Connect DB
+    await connectDBs();
+    logger.info("✅ Database connection established");
+
+    // 2️⃣ Sync models
+    if (process.env.DB_SYNC === "true") {
+      await sequelizePrimary.sync({ alter: true });
+      logger.info("🔄 DB sync enabled");
+    } else {
+      logger.info("⏭️ DB sync skipped");
+    }
+
+    // 3️⃣ Start server
+    app.listen(PORT, () => {
+      logger.info(`🚀 Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    logger.error("❌ Server startup failed", {
+      message: error.message,
+      stack: error.stack,
+    });
+    process.exit(1);
+  }
+})();

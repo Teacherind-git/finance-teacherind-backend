@@ -12,6 +12,10 @@ const Student = sequelizePrimary.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    studentId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     status: {
       type: DataTypes.ENUM("Onboard", "Active", "Inactive", "Pending"),
       defaultValue: "Onboard",

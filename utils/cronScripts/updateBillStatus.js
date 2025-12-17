@@ -1,68 +1,191 @@
 require("dotenv").config({
   path: "/home/trivand/Thanseem/Payroll System/payroll-backend/.env",
+  quiet: true,
 });
-const moment = require("moment-timezone");
+
+const moment = require("moment");
 const { Op } = require("sequelize");
 
+// Models
+const Student = require("../../models/primary/Student");
+const StudentDetail = require("../../models/primary/StudentDetail");
 const StudentBill = require("../../models/primary/StudentBill");
-const logger = require("../../utils/logger"); // ✅ path as needed
+const PrimaryUser = require("../../models/primary/User");
 
-async function updateBillStatus() {
-  const today = moment().tz("Asia/Kolkata").toDate();
+// Logger
+const logger = require("../logger");
 
-  logger.info("Bill status update job started", {
-    date: today,
+/* ==========================
+   CRON-FRIENDLY LOGGER
+========================== */
+const logBoth = {
+  info: (msg, meta = {}) => logger.info(msg, meta),
+  warn: (msg, meta = {}) => logger.warn(msg, meta),
+  error: (msg, meta = {}) => logger.error(msg, meta),
+};
+
+/* ==========================
+   HELPERS
+========================== */
+
+// ✅ ADMIN USER (roleId = 1)
+async function getAdminUser() {
+  const adminUser = await PrimaryUser.findOne({
+    where: {
+      roleId: 1,
+      isDeleted: false,
+    },
+    attributes: ["id"],
+  });
+
+  if (!adminUser) {
+    throw new Error("❌ Admin user (roleId = 1) not found");
+  }
+
+  return adminUser;
+}
+
+async function generateInvoiceId(transaction = null) {
+  const year = moment().format("YYYY");
+  const month = moment().format("MM");
+
+  const prefix = `INV-${year}-${month}`;
+
+  const lastBill = await StudentBill.findOne({
+    where: {
+      invoiceId: {
+        [Op.like]: `${prefix}-%`,
+      },
+    },
+    order: [["createdAt", "DESC"]],
+    transaction,
+  });
+
+  let nextNumber = 1;
+
+  if (lastBill?.invoiceId) {
+    const parts = lastBill.invoiceId.split("-");
+    nextNumber = parseInt(parts[3], 10) + 1;
+  }
+
+  return `${prefix}-${String(nextNumber).padStart(3, "0")}`;
+}
+
+/* ==========================
+   MAIN CRON
+========================== */
+async function generateBills() {
+  const startOfToday = moment().startOf("day");
+  const endOfToday = moment().endOf("day");
+
+  logBoth.info("📄 Student billing job started", {
+    date: startOfToday.format("YYYY-MM-DD"),
   });
 
   try {
-    // 🔶 Normal overdue → On Due
-    const overdueBills = await StudentBill.findAll({
+    /* --------------------------
+       ADMIN USER
+    --------------------------- */
+    const adminUser = await getAdminUser();
+    logBoth.info("🛠️ Billing executed by Admin", {
+      adminUserId: adminUser.id,
+    });
+
+    /* --------------------------
+       FETCH STUDENTS
+    --------------------------- */
+    const students = await Student.findAll({
       where: {
+        createdAt: {
+          [Op.between]: [startOfToday.toDate(), endOfToday.toDate()],
+        },
+      },
+      include: [
+        {
+          model: StudentDetail,
+          as: "details",
+          required: true,
+        },
+      ],
+    });
+
+    logBoth.info("Students fetched for billing", {
+      count: students.length,
+    });
+
+    for (const student of students) {
+      const existingBill = await StudentBill.findOne({
+        where: {
+          studentId: student.id,
+          billDate: {
+            [Op.between]: [startOfToday.toDate(), endOfToday.toDate()],
+          },
+        },
+      });
+
+      if (existingBill) {
+        logBoth.warn("Billing skipped – already billed today", {
+          studentId: student.id,
+        });
+        continue;
+      }
+
+      let totalAmount = 0;
+      let earliestStartDate = null;
+
+      for (const detail of student.details) {
+        const price = detail.totalPrice || detail.packagePrice || 0;
+        totalAmount += price;
+
+        if (
+          detail.startDate &&
+          (!earliestStartDate ||
+            moment(detail.startDate).isBefore(earliestStartDate))
+        ) {
+          earliestStartDate = detail.startDate;
+        }
+      }
+
+      if (totalAmount <= 0) {
+        logBoth.warn("Billing skipped – amount is zero", {
+          studentId: student.id,
+        });
+        continue;
+      }
+
+      const invoiceId = await generateInvoiceId();
+
+      await StudentBill.create({
+        invoiceId,
+        studentId: student.id,
+        amount: totalAmount,
+        billDate: moment().toDate(),
+        dueDate: earliestStartDate
+          ? moment(earliestStartDate).toDate()
+          : moment().toDate(),
+        finalDueDate: earliestStartDate
+          ? moment(earliestStartDate)
+              .add(parseInt(process.env.FINAL_DUE_MINUTES || "60"), "minutes")
+              .toDate()
+          : moment()
+              .add(parseInt(process.env.FINAL_DUE_MINUTES || "60"), "minutes")
+              .toDate(),
         status: "Generated",
-        dueDate: { [Op.lte]: today },
-      },
-    });
+        createdBy: adminUser.id,   // ✅ dynamic
+        updatedBy: adminUser.id,   // ✅ dynamic
+      });
 
-    logger.info("Generated bills crossed dueDate", {
-      count: overdueBills.length,
-    });
-
-    for (const bill of overdueBills) {
-      bill.status = "On Due";
-      await bill.save();
-
-      logger.info("Bill moved to On Due", {
-        billId: bill.id,
-        studentId: bill.studentId,
+      logBoth.info("✅ Bill generated successfully", {
+        studentId: student.id,
+        invoiceId,
+        amount: totalAmount,
       });
     }
 
-    // 🔴 Final overdue → Overdue
-    const finalOverdueBills = await StudentBill.findAll({
-      where: {
-        status: { [Op.ne]: "Paid" },
-        finalDueDate: { [Op.lte]: today },
-      },
-    });
-
-    logger.info("Bills crossed finalDueDate", {
-      count: finalOverdueBills.length,
-    });
-
-    for (const bill of finalOverdueBills) {
-      bill.status = "Overdue";
-      await bill.save();
-
-      logger.warn("Bill marked as Overdue", {
-        billId: bill.id,
-        studentId: bill.studentId,
-      });
-    }
-
-    logger.info("Bill status update job completed successfully");
+    logBoth.info("🎉 Student billing job completed successfully");
     process.exit(0);
   } catch (error) {
-    logger.error("Bill status update job failed", {
+    logBoth.error("❌ Student billing job failed", {
       message: error.message,
       stack: error.stack,
     });
@@ -70,4 +193,4 @@ async function updateBillStatus() {
   }
 }
 
-updateBillStatus();
+generateBills();

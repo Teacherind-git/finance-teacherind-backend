@@ -1,18 +1,16 @@
 const dotenv = require("dotenv");
 const path = require("path");
-
 dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 const { sequelizePrimary } = require("../../config/db");
 const User = require("../../models/primary/User");
 const Role = require("../../models/primary/Role");
-
-const bcrypt = require("bcryptjs");
+const logger = require("../../utils/logger"); // ✅ central logger
 
 const createAdminUsers = async () => {
   try {
     await sequelizePrimary.authenticate();
-    console.log("✅ Connected to MySQL");
+    logger.info("✅ Connected to MySQL");
 
     await sequelizePrimary.sync();
 
@@ -23,7 +21,17 @@ const createAdminUsers = async () => {
         name: "Admin",
         permissions: ["read", "write", "update"], // adjust if needed
       });
-      console.log("🟢 Created Admin role");
+      logger.info("🟢 Created Admin role");
+    }
+
+    // Find any existing user with roleId = 1 to use as createdBy / updatedBy
+    const creatorUser = await User.findOne({ where: { roleId: 1 } });
+    const createdById = creatorUser ? creatorUser.id : null;
+
+    if (!createdById) {
+      logger.warn(
+        "⚠ No existing user with roleId=1 found. createdBy/updatedBy will be null."
+      );
     }
 
     // Users to create
@@ -59,16 +67,16 @@ const createAdminUsers = async () => {
       const existingUser = await User.findOne({ where: { email } });
 
       if (existingUser) {
-        console.log(`🟡 ${admin.title} already exists (${email}), skipping...`);
+        logger.warn(`${admin.title} already exists (${email}), skipping...`);
         continue;
       }
 
-      // Create user
+      // Create user with createdBy / updatedBy
       await User.create({
         firstName: admin.title,
         lastName: "Admin",
         email,
-        password: password,
+        password,
         roleId: adminRole.id,
         position: admin.title,
         department: "Management",
@@ -76,18 +84,23 @@ const createAdminUsers = async () => {
         taxId: "",
         address: { country: "", state: "", postalCode: "" },
         isActive: true,
+        createdBy: createdById,
+        updatedBy: createdById,
       });
 
-      console.log(`🟢 ${admin.title} created:`);
-      console.log(`   Email: ${email}`);
-      console.log(`   Password: ${password}`);
+      logger.info(
+        `${admin.title} created: Email: ${email}, Password: ${password}`
+      );
     }
 
     await sequelizePrimary.close();
-    console.log("🔒 MySQL connection closed");
+    logger.info("🔒 MySQL connection closed");
     process.exit(0);
   } catch (err) {
-    console.error("❌ Error creating Admin users:", err.message);
+    logger.error("❌ Error creating Admin users", {
+      message: err.message,
+      stack: err.stack,
+    });
     await sequelizePrimary.close();
     process.exit(1);
   }

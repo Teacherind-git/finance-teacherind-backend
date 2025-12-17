@@ -7,11 +7,12 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 const { sequelizePrimary } = require("../../config/db");
 const User = require("../../models/primary/User");
 const Role = require("../../models/primary/Role");
+const logger = require("../../utils/logger"); // ✅ centralized logger
 
 const createSuperAdmin = async () => {
   try {
     await sequelizePrimary.authenticate();
-    console.log("✅ Connected to MySQL");
+    logger.info("✅ Connected to MySQL");
 
     // Ensure tables exist
     await sequelizePrimary.sync();
@@ -23,7 +24,7 @@ const createSuperAdmin = async () => {
         name: "SuperAdmin",
         permissions: ["*"],
       });
-      console.log("🟢 Created SuperAdmin role");
+      logger.info("🟢 Created SuperAdmin role");
     }
 
     const email = process.env.SUPERADMIN_EMAIL || "superadmin@example.com";
@@ -32,7 +33,7 @@ const createSuperAdmin = async () => {
     // Check if SuperAdmin user exists
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      console.log("🟡 SuperAdmin user already exists");
+      logger.warn("🟡 SuperAdmin user already exists");
       await sequelizePrimary.close();
       process.exit(0);
     }
@@ -52,16 +53,20 @@ const createSuperAdmin = async () => {
       isActive: true,
     });
 
-    console.log("🟢 SuperAdmin user created successfully:");
-    console.log(`   Email: ${email}`);
-    console.log(`   Password: ${password}`);
-    console.log("   Role: SuperAdmin");
+    logger.info("🟢 SuperAdmin user created successfully", {
+      email,
+      password,
+      role: "SuperAdmin",
+    });
 
     await sequelizePrimary.close();
-    console.log("🔒 MySQL connection closed");
+    logger.info("🔒 MySQL connection closed");
     process.exit(0);
   } catch (err) {
-    console.error("❌ Error creating SuperAdmin:", err.message);
+    logger.error("❌ Error creating SuperAdmin", {
+      message: err.message,
+      stack: err.stack,
+    });
     await sequelizePrimary.close();
     process.exit(1);
   }

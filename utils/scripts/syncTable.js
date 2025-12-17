@@ -1,18 +1,19 @@
 const { sequelizePrimary } = require("../../config/db");
-const FeeStructure = require("../../models/primary/Expense");
+const Expense = require("../../models/primary/Expense"); // renamed for clarity
+const logger = require("../../utils/logger"); // optional centralized logger
 
 (async () => {
   try {
     await sequelizePrimary.authenticate();
-    console.log("✅ Database connection established.");
+    logger.info("✅ Database connection established.");
 
-    // Create table if it doesn't exist
-    await FeeStructure.sync({ alter: true });
-    console.log("✅ table created or updated successfully.");
+    // Create or update table based on model
+    await Expense.sync({ alter: true });
+    logger.info("✅ Expense table created or updated successfully.");
 
     process.exit(0);
   } catch (error) {
-    console.error("❌ Error creating table:", error);
+    logger.error("❌ Error creating/updating Expense table:", { message: error.message, stack: error.stack });
     process.exit(1);
   }
 })();

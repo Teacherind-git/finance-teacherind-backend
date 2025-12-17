@@ -1,7 +1,9 @@
 const { Sequelize } = require("sequelize");
 require("dotenv").config();
+const logger = require("../utils/logger"); // ✅ central logger
 
-// 🟢 Primary DB connection (your current DB)
+/* ================= PRIMARY DB ================= */
+
 const sequelizePrimary = new Sequelize(
   process.env.MYSQL_DB,
   process.env.MYSQL_USER,
@@ -9,11 +11,12 @@ const sequelizePrimary = new Sequelize(
   {
     host: process.env.MYSQL_HOST || "localhost",
     dialect: "mysql",
-    logging: false,
+    logging: false, // set true if you want SQL logs
   }
 );
 
-// 🔵 Secondary DB connection (external/source DB)
+/* ================= SECONDARY DB ================= */
+
 const sequelizeSecondary = new Sequelize(
   process.env.MYSQL_SECOND_DB,
   process.env.MYSQL_SECOND_USER,
@@ -25,17 +28,28 @@ const sequelizeSecondary = new Sequelize(
   }
 );
 
+/* ================= CONNECT DBS ================= */
+
 const connectDBs = async () => {
   try {
+    logger.info("🔌 Connecting to Primary MySQL...");
     await sequelizePrimary.authenticate();
-    console.log("✅ Primary MySQL Connected");
+    logger.info("✅ Primary MySQL Connected");
 
+    logger.info("🔌 Connecting to Secondary MySQL...");
     await sequelizeSecondary.authenticate();
-    console.log("✅ Secondary MySQL Connected");
+    logger.info("✅ Secondary MySQL Connected");
   } catch (error) {
-    console.error("❌ MySQL Connection Failed:", error.message);
+    logger.error("❌ MySQL Connection Failed", {
+      message: error.message,
+      stack: error.stack,
+    });
     process.exit(1);
   }
 };
 
-module.exports = { sequelizePrimary, sequelizeSecondary, connectDBs };
+module.exports = {
+  sequelizePrimary,
+  sequelizeSecondary,
+  connectDBs,
+};

@@ -15,8 +15,6 @@ exports.createExpense = async (req, res) => {
         .status(400)
         .json({ message: "Unauthorized: Missing user info" });
     }
-    console.log('555', expenseDate, category, subCategory, amount);
-    
 
     if (!expenseDate || !category || !subCategory || !amount) {
       return res.status(400).json({

@@ -4,6 +4,10 @@ const path = require("path");
 const { getFirestore } = require("firebase-admin/firestore");
 const { getStorage } = require("firebase-admin/storage");
 const { Sequelize, DataTypes } = require("sequelize");
+const logger = require("../../utils/logger");
+
+// ✅ IMPORT EXISTING USER MODEL
+const User = require("../../models/primary/User");
 
 // ===============================
 // 🔥 Firebase Setup
@@ -22,12 +26,13 @@ if (!admin.apps.length) {
     "app1"
   );
 
-  console.log("✅ Firebase initialized successfully");
+  logger.info("✅ Firebase initialized successfully");
 }
 
 const db = getFirestore(admin.app("app1"));
 const storage = getStorage(admin.app("app1"));
 
+// ===============================
 // 🧱 Sequelize MySQL Setup
 // ===============================
 const sequelize = new Sequelize(
@@ -42,16 +47,32 @@ const sequelize = new Sequelize(
 );
 
 // ===============================
+// 🔍 Fetch Admin User ID
+// ===============================
+async function getAdminUserId() {
+  const adminUser = await User.findOne({
+    where: { roleId: 1 },
+    attributes: ["id"],
+  });
+
+  if (!adminUser) {
+    throw new Error("❌ Admin user (roleId = 1) not found in users table");
+  }
+
+  return adminUser.id;
+}
+
+// ===============================
 // 🚀 Migration Function
 // ===============================
 const excludedCollections = ["users", "questions", "modules", "sections"];
 
-async function migrateCollection(collectionName) {
-  console.log(`\n🚀 Migrating collection: ${collectionName}`);
+async function migrateCollection(collectionName, adminUserId) {
+  logger.info(`🚀 Migrating collection: ${collectionName}`);
 
   const snapshot = await db.collection(collectionName).get();
   if (snapshot.empty) {
-    console.log(`⚠️ No documents found in '${collectionName}'`);
+    logger.warn(`⚠️ No documents found in '${collectionName}'`);
     return;
   }
 
@@ -65,20 +86,25 @@ async function migrateCollection(collectionName) {
     Object.keys(data).forEach((key) => {
       let value = data[key];
 
-      // CLEAN STRING FIELDS
+      // 🧹 Clean strings
       if (typeof value === "string") {
         value = value.trim();
         if (
           (value.startsWith('"') && value.endsWith('"')) ||
           (value.startsWith("'") && value.endsWith("'"))
         ) {
-          value = value.substring(1, value.length - 1);
+          value = value.slice(1, -1);
         }
+      }
+
+      // 🕒 Firestore Timestamp → Date
+      if (value instanceof admin.firestore.Timestamp) {
+        value = value.toDate();
       }
 
       cleanedData[key] = value;
 
-      // Detect data type
+      // 🔍 Detect field type
       if (!allFields[key]) {
         if (typeof value === "string") {
           allFields[key] = DataTypes.STRING;
@@ -86,24 +112,39 @@ async function migrateCollection(collectionName) {
           allFields[key] = Number.isInteger(value)
             ? DataTypes.INTEGER
             : DataTypes.FLOAT;
-        } else if (value instanceof admin.firestore.Timestamp) {
+        } else if (value instanceof Date) {
           allFields[key] = DataTypes.DATE;
-          cleanedData[key] = value.toDate();
         } else if (Array.isArray(value) || typeof value === "object") {
           allFields[key] = DataTypes.JSON;
         } else {
-          allFields[key] = DataTypes.STRING; // fallback
+          allFields[key] = DataTypes.STRING;
         }
       }
     });
 
-    docs.push({ firebase_id: doc.id, ...cleanedData });
+    docs.push({
+      firebase_id: doc.id,
+      ...cleanedData,
+      createdBy: adminUserId,
+      updatedBy: adminUserId,
+    });
   });
 
-  // Build sequelize model
+  // ===============================
+  // 🏗️ Dynamic Sequelize Model
+  // ===============================
   const modelAttributes = {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
     firebase_id: { type: DataTypes.STRING, allowNull: false },
+
+    createdBy: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
+    updatedBy: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+    },
   };
 
   Object.keys(allFields).forEach((field) => {
@@ -115,22 +156,25 @@ async function migrateCollection(collectionName) {
     timestamps: true,
   });
 
-  await DynamicModel.sync();
+  await DynamicModel.sync({ alter: true });
 
-  for (const doc of docs) {
-    await DynamicModel.upsert(doc);
+  for (const record of docs) {
+    await DynamicModel.upsert(record);
   }
 
-  console.log(`✅ ${docs.length} records migrated from '${collectionName}'`);
+  logger.info(`✅ ${docs.length} records migrated from '${collectionName}'`);
 }
 
 // ===============================
-// 🏁 Main Migration Runner
+// 🏁 Main Runner
 // ===============================
 async function main() {
   try {
     await sequelize.authenticate();
-    console.log("✅ Connected to MySQL database.");
+    logger.info("✅ Connected to MySQL database");
+
+    const adminUserId = await getAdminUserId();
+    logger.info(`👤 Admin User ID resolved: ${adminUserId}`);
 
     const collections = [
       "classes",
@@ -142,16 +186,19 @@ async function main() {
 
     for (const name of collections) {
       if (!excludedCollections.includes(name)) {
-        await migrateCollection(name);
+        await migrateCollection(name, adminUserId);
       }
     }
 
-    console.log("\n🎉 Migration completed successfully!");
+    logger.info("🎉 Migration completed successfully");
   } catch (error) {
-    console.error("❌ Migration failed:", error);
+    logger.error("❌ Migration failed", {
+      message: error.message,
+      stack: error.stack,
+    });
   } finally {
     await sequelize.close();
-    console.log("🔒 MySQL connection closed.");
+    logger.info("🔒 MySQL connection closed");
   }
 }
 
