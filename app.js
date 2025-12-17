@@ -22,6 +22,7 @@ const tutorPayrollRoutes = require("./routes/primary/tutorPayrollRoutes");
 const counselorPayrollRoutes = require("./routes/primary/counselorPayrollRoutes");
 const expenseRoutes = require("./routes/primary/expenseRoutes");
 const tutorRoutes = require("./routes/primary/tutorSalary");
+const financeRoutes = require("./routes/primary/financeRoutes");
 
 dotenv.config();
 connectDBs();
@@ -61,6 +62,7 @@ app.use("/api/tutor-payroll", tutorPayrollRoutes);
 app.use("/api/counselor-payroll", counselorPayrollRoutes);
 app.use("/api/expense", expenseRoutes);
 app.use("/api/tutor", tutorRoutes);
+app.use("/api/finance", financeRoutes);
 
 /* ✅ Error handler (ALWAYS LAST) */
 app.use(errorHandler);

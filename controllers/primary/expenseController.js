@@ -7,6 +7,16 @@ exports.createExpense = async (req, res) => {
   try {
     const { expenseDate, category, subCategory, description, amount } =
       req.body;
+    const userId = req.user?.id;
+
+    if (!userId) {
+      logger.warn("Create fee structure failed: Missing user info");
+      return res
+        .status(400)
+        .json({ message: "Unauthorized: Missing user info" });
+    }
+    console.log('555', expenseDate, category, subCategory, amount);
+    
 
     if (!expenseDate || !category || !subCategory || !amount) {
       return res.status(400).json({
@@ -20,6 +30,8 @@ exports.createExpense = async (req, res) => {
       subCategory,
       description,
       amount,
+      createdBy: userId,
+      updatedBy: userId,
     });
 
     logger.info(`Expense created: ${expense.id}`, { payload: req.body });

@@ -11,7 +11,7 @@ const Expense = sequelizePrimary.define(
     },
 
     expenseDate: {
-      type: DataTypes.DATEONLY,
+      type: DataTypes.DATE,
       allowNull: false,
     },
 
