@@ -39,6 +39,7 @@ router.post(
 router.get("/", controller.getAllStaff);
 router.get("/tutors", controller.getAllTutors);
 router.get("/counselors", controller.getAllCounselors);
+router.get("/summary", controller.getStaffSummary);
 router.get("/salary", salaryController.getAllSalaries);
 router.get(
   "/salary/non-assigned",
@@ -46,6 +47,7 @@ router.get(
 );
 router.get("/salary/receipt/:id", salaryController.downloadReceipt);
 router.get("/:id", controller.getStaff);
+
 
 // Delete
 router.delete(

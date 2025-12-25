@@ -51,7 +51,10 @@ exports.getAllUsers = async (req, res) => {
     /* ---------- SuperAdmin ---------- */
     if (req.user.role.name === "SuperAdmin") {
       if (type === "SuperAdmin") {
-        whereCondition.createdBy = req.user.id;
+        whereCondition[Op.or] = [
+          { createdBy: req.user.id },
+          { createdBy: null }, // 👈 include system-created superadmins
+        ];
       } else if (type === "Others") {
         whereCondition.createdBy = { [Op.ne]: req.user.id };
       }
@@ -171,7 +174,7 @@ exports.updateUser = async (req, res) => {
       phone,
       taxId,
       address,
-      status
+      status,
     } = req.body;
 
     logger.info("Updating user", {
@@ -203,7 +206,7 @@ exports.updateUser = async (req, res) => {
     user.position = position ?? user.position;
     user.phone = phone ?? user.phone;
     user.taxId = taxId ?? user.taxId;
-     user.status = status ?? user.taxId;
+    user.status = status ?? user.taxId;
 
     if (address) {
       user.address = { ...user.address, ...address };
@@ -278,7 +281,7 @@ exports.getFinanceStaffUsers = async (req, res) => {
         position: {
           [Op.in]: ["Staff", "Intern"],
         },
-        status:"Active",
+        status: "Active",
         isDeleted: false, // remove if not using soft delete
       },
       attributes: [

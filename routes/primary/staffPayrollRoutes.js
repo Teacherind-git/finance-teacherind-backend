@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 
 const payrollController = require("../../controllers/primary/staffPayrollController");
-const { protect, authorizeRoles } = require('../../middlewares/authMiddleware');
+const { protect, authorizeRoles } = require("../../middlewares/authMiddleware");
 
 router.use(protect);
 // CREATE
@@ -17,6 +17,11 @@ router.get(
   "/",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   payrollController.getAllPayrolls
+);
+router.get(
+  "/summary",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  payrollController.getCurrentMonthPayrollSummary
 );
 router.get(
   "/:id",
@@ -37,5 +42,8 @@ router.delete(
   authorizeRoles("SuperAdmin", "Admin", "User"),
   payrollController.deletePayroll
 );
+
+// AUDIT
+router.get("/payrolls/:id/audit", payrollController.getPayrollAudit);
 
 module.exports = router;

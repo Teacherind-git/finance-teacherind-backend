@@ -10,7 +10,7 @@ const Student = require("../../models/primary/Student");
 const StudentDetail = require("../../models/primary/StudentDetail");
 const StudentBill = require("../../models/primary/StudentBill");
 
-const logger = require("../logger"); // ✅ logger path
+const logger = require("../logger");
 
 // ✅ Log to BOTH console + logger (cron-friendly)
 const logBoth = {

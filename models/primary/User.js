@@ -66,9 +66,9 @@ const User = sequelizePrimary.define(
     },
 
     address: {
-      type: DataTypes.JSON,
+      type: DataTypes.STRING,
       allowNull: true,
-      defaultValue: {},
+      defaultValue: "",
     },
 
     status: {

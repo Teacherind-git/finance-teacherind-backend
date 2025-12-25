@@ -10,7 +10,6 @@ const logger = require("../../utils/logger");
 const SecondaryUser = require("../../models/secondary/User");
 const { getPaginationParams } = require("../../utils/pagination");
 
-
 /* ================= CREATE STAFF (STEP 1) ================= */
 exports.createStaff = async (req, res) => {
   try {
@@ -308,14 +307,20 @@ exports.getAllStaff = async (req, res) => {
       createdBy: s.createdBy ? creatorMap[s.createdBy] || "Unknown" : null,
     }));
 
-    const formattedUsers = newUsers.map((u) => ({
-      ...u.toJSON(),
-      fullName: `${u.firstName} ${u.lastName}`,
-      roleName: u.role?.name || "",
-      documents: [],
-      status: u.status ? "Active" : "Inactive",
-      createdBy: u.createdBy ? creatorMap[u.createdBy] || "Unknown" : null,
-    }));
+    const formattedUsers = newUsers.map((u) => {
+      // Check if this user exists in staffList (email match)
+      const isInStaff = staffList.some((s) => s.email === u.email);
+
+      return {
+        ...u.toJSON(),
+        fullName: `${u.firstName} ${u.lastName}`,
+        roleName: u.role?.name || "",
+        documents: [],
+        status: u.status ? "Active" : "Inactive",
+        staffStatus: isInStaff ? "Already in Staff" : "Can be Updated", // <-- new field
+        createdBy: u.createdBy ? creatorMap[u.createdBy] || "Unknown" : null,
+      };
+    });
 
     let combinedList = [...formattedStaff, ...formattedUsers];
 
@@ -393,7 +398,9 @@ exports.getAllTutors = async (req, res) => {
     });
   } catch (error) {
     logger.error("Error fetching tutor list", error);
-    return res.status(500).json({ success: false, message: "Failed to fetch tutors" });
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to fetch tutors" });
   }
 };
 
@@ -447,3 +454,41 @@ exports.getAllCounselors = async (req, res) => {
   }
 };
 
+/* ================= STAFF SUMMARY ================= */
+exports.getStaffSummary = async (req, res) => {
+  try {
+    logger.info("Fetching staff summary");
+
+    const [totalStaff, totalTutors, totalCounselors] = await Promise.all([
+      // Total staff (primary DB)
+      Staff.count({
+        where: { isDeleted: false },
+      }),
+
+      // Total tutors (secondary DB)
+      SecondaryUser.count({
+        where: { role: 3 },
+      }),
+
+      // Total counselors (secondary DB)
+      SecondaryUser.count({
+        where: { role: 2 },
+      }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        totalStaff,
+        totalTutors,
+        totalCounselors,
+      },
+    });
+  } catch (error) {
+    logger.error("Error fetching staff summary", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch staff summary",
+    });
+  }
+};

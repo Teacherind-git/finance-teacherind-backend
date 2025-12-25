@@ -82,7 +82,7 @@ const createAdminUsers = async () => {
         department: "Management",
         phone: "",
         taxId: "",
-        address: { country: "", state: "", postalCode: "" },
+        address: "",
         isActive: true,
         createdBy: createdById,
         updatedBy: createdById,

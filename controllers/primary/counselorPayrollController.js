@@ -2,6 +2,7 @@ const User = require("../../models/secondary/User");
 const counselorPayroll = require("../../models/primary/CounselorPayroll");
 const logger = require("../../utils/logger");
 const { getPaginationParams } = require("../../utils/pagination");
+const { Op } = require("sequelize");
 
 /**
  * GET counselor payroll list (default values if payroll not created)
@@ -172,5 +173,170 @@ exports.createOrUpdatePayroll = async (req, res) => {
     });
 
     res.status(500).json({ success: false, message: "Payroll save failed" });
+  }
+};
+
+/* =========================
+   COUNSELOR PAYROLL SUMMARY
+   (CURRENT MONTH)
+========================= */
+exports.getCounselorPayrollSummary = async (req, res) => {
+  try {
+    // Current month range
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const endOfMonth = new Date(
+      startOfMonth.getFullYear(),
+      startOfMonth.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999
+    );
+
+    /* -------------------------
+       TOTAL ACTIVE COUNSELORS
+    -------------------------- */
+    const totalCounselors = await User.count({
+      where: {
+        role: 2, // counselor
+        status: 1, // active
+      },
+    });
+
+    console.log(totalCounselors,'oooo');
+    
+
+    /* -------------------------
+       COMPLETED PAYROLLS
+    -------------------------- */
+    const completedPayrolls = await counselorPayroll.count({
+      where: {
+        isDeleted: false,
+        payrollMonth: {
+          [Op.between]: [startOfMonth, endOfMonth],
+        },
+      },
+    });
+    console.log('5555');
+    
+
+    /* -------------------------
+       PENDING PAYROLLS
+    -------------------------- */
+    const pendingPayrolls = totalCounselors - completedPayrolls;
+
+    res.json({
+      success: true,
+      data: {
+        total: totalCounselors,
+        completed: completedPayrolls,
+        pending: pendingPayrolls < 0 ? 0 : pendingPayrolls,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch counselor payroll summary",
+    });
+  }
+};
+
+/* =========================
+   UPDATE COUNSELOR PAYROLL
+========================= */
+exports.updateCounselorPayroll = async (req, res) => {
+  const { id } = req.params;
+  const payload = req.body;
+
+  try {
+    const payroll = await counselorPayroll.findOne({
+      where: { id, isDeleted: false },
+    });
+
+    if (!payroll) {
+      return res.status(404).json({
+        success: false,
+        message: "Counselor payroll not found",
+      });
+    }
+
+    await payroll.update({
+      payrollMonth: payload.payrollMonth,
+      baseSalary: payload.baseSalary,
+      grossSalary: payload.grossSalary,
+
+      earnings: payload.earnings || [],
+      totalEarnings: payload.totalEarnings || 0,
+
+      deductions: payload.deductions || [],
+      totalDeductions: payload.totalDeductions || 0,
+
+      netSalary: payload.netSalary,
+      updatedBy: payload.userId,
+    });
+
+    logger.info("Counselor payroll updated", { payrollId: id });
+
+    res.json({
+      success: true,
+      message: "Counselor payroll updated successfully",
+      data: payroll,
+    });
+  } catch (err) {
+    logger.error("Update counselor payroll failed", {
+      error: err.message,
+      stack: err.stack,
+    });
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update counselor payroll",
+    });
+  }
+};
+
+/* =========================
+   DELETE COUNSELOR PAYROLL
+========================= */
+exports.deleteCounselorPayroll = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const payroll = await counselorPayroll.findOne({
+      where: { id, isDeleted: false },
+    });
+
+    if (!payroll) {
+      return res.status(404).json({
+        success: false,
+        message: "Counselor payroll not found",
+      });
+    }
+
+    await payroll.update({
+      isDeleted: true,
+      updatedBy: req.user?.id,
+    });
+
+    logger.info("Counselor payroll deleted", { payrollId: id });
+
+    res.json({
+      success: true,
+      message: "Counselor payroll deleted successfully",
+    });
+  } catch (err) {
+    logger.error("Delete counselor payroll failed", {
+      error: err.message,
+      stack: err.stack,
+    });
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete counselor payroll",
+    });
   }
 };
