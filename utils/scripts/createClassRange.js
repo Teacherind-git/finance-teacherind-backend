@@ -50,7 +50,7 @@ async function createClassRanges() {
        DEFINE RANGES
     ================================ */
     const ranges = [
-      { label: "Class 1 - 3", fromClass: 1, toClass: 3 },
+      { label: "Class 1 - 4", fromClass: 1, toClass: 4 },
       { label: "Class 5 - 7", fromClass: 5, toClass: 7 },
       { label: "Class 8 - 10", fromClass: 8, toClass: 10 },
       { label: "Class 11 - 12", fromClass: 11, toClass: 12 },
