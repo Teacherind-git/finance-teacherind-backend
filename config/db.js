@@ -1,6 +1,6 @@
 const { Sequelize } = require("sequelize");
 require("dotenv").config();
-const logger = require("../utils/logger"); // ✅ central logger
+const logger = require("../utils/logger");
 
 /* ================= PRIMARY DB ================= */
 
@@ -10,8 +10,9 @@ const sequelizePrimary = new Sequelize(
   process.env.MYSQL_PASSWORD,
   {
     host: process.env.MYSQL_HOST || "localhost",
+    port: process.env.MYSQL_PORT || 3306,
     dialect: "mysql",
-    logging: false, // set true if you want SQL logs
+    logging: false,
   }
 );
 
@@ -22,7 +23,8 @@ const sequelizeSecondary = new Sequelize(
   process.env.MYSQL_SECOND_USER,
   process.env.MYSQL_SECOND_PASSWORD,
   {
-    host: process.env.MYSQL_SECOND_HOST || "localhost",
+    host: process.env.MYSQL_SECOND_HOST,
+    port: process.env.MYSQL_SECOND_PORT || 3306,
     dialect: "mysql",
     logging: false,
   }

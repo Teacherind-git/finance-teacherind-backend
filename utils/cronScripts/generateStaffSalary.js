@@ -71,7 +71,7 @@ async function generateStaffSalary() {
       if (exists) continue;
 
       await StaffSalary.create({
-        payrollId: payroll.id,
+        staffPayrollId: payroll.id,
         staffId: payroll.staffId,
         amount: payroll.netSalary,
         payrollMonth: payroll.payrollMonth,
@@ -111,7 +111,7 @@ async function generateStaffSalary() {
       if (exists) continue;
 
       await StaffSalary.create({
-        payrollId: payroll.id,
+        counselorPayrollId: payroll.id,
         counselorId: payroll.counselorId,
         amount: payroll.netSalary,
         payrollMonth: payroll.payrollMonth,
@@ -133,6 +133,9 @@ async function generateStaffSalary() {
   } catch (error) {
     logger.error("❌ Staff & Counselor salary cron failed", {
       message: error.message,
+      sqlMessage: error?.parent?.sqlMessage,
+      sqlCode: error?.parent?.code,
+      errors: error.errors,
       stack: error.stack,
     });
   }

@@ -67,7 +67,7 @@ async function generateTutorSalary() {
   try {
     logger.info("🔄 Tutor Salary cron started");
 
-    const payrollMonth = "2025-09-01";
+    const payrollMonth = "2025-12-01";
     const d = new Date(payrollMonth);
     const startDate = new Date(d.getFullYear(), d.getMonth(), 1);
     const endDate = new Date(d.getFullYear(), d.getMonth() + 1, 0);

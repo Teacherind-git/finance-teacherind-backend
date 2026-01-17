@@ -163,7 +163,7 @@ exports.downloadReceipt = async (req, res) => {
 
     const salary = await StaffSalary.findOne({
       where: { id: salaryId, isDeleted: false, status: "Paid" },
-      include: [{ model: StaffPayroll, as: "payroll" }],
+      include: [{ model: StaffPayroll, as: "staffPayroll" }],
     });
 
     if (!salary) {
@@ -190,7 +190,7 @@ exports.downloadReceipt = async (req, res) => {
         .json({ success: false, message: "Employee not found" });
     }
 
-    const payroll = salary.payroll;
+    const payroll = salary.staffPayroll;
     const { start, end } = getMonthStartAndEnd(payroll.payrollMonth);
 
     const data = {
@@ -263,7 +263,7 @@ exports.assignStaffSalaries = async (req, res) => {
     }
 
     const salaries = await StaffSalary.findAll({
-      where: { id: { [Op.in]: salaryIds }, assignedTo: 16 },
+      where: { id: { [Op.in]: salaryIds }, assignedTo: null },
     });
 
     if (!salaries.length) {
@@ -298,7 +298,7 @@ exports.getNonAssignedStaffSalaries = async (req, res) => {
   try {
     const { minAmount, maxAmount, fromDate, toDate } = req.query;
 
-    const whereCondition = { isDeleted: false, assignedTo: 16 };
+    const whereCondition = { isDeleted: false, assignedTo: null };
     whereCondition.status = { [Op.ne]: "Pending" };
 
     if (minAmount || maxAmount) {
@@ -316,7 +316,13 @@ exports.getNonAssignedStaffSalaries = async (req, res) => {
     const salaries = await StaffSalary.findAll({
       where: whereCondition,
       order: [["createdAt", "DESC"]],
-      include: [{ model: StaffPayroll, as: "payroll" }],
+      include: [
+        {
+          model: StaffPayroll,
+          as: "staffPayroll",
+          required: false, // important because counselor salaries exist
+        },
+      ],
     });
 
     const finalData = [];
@@ -378,13 +384,11 @@ exports.getNonAssignedStaffSalaries = async (req, res) => {
       message: error.message,
       stack: error.stack,
     });
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };
 

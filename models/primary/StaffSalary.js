@@ -1,13 +1,18 @@
 const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
 const StaffPayroll = require("./StaffPayroll");
+const CounselorPayroll = require("./CounselorPayroll");
 
 const StaffSalary = sequelizePrimary.define(
   "staff_salary",
   {
-    payrollId: {
+    staffPayrollId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
+    },
+    counselorPayrollId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
     },
     payrollMonth: {
       type: DataTypes.DATE,
@@ -81,15 +86,26 @@ const StaffSalary = sequelizePrimary.define(
     timestamps: true,
   }
 );
-
+// STAFF PAYROLL RELATION
 StaffSalary.belongsTo(StaffPayroll, {
-  foreignKey: "payrollId",
-  as: "payroll",
+  foreignKey: "staffPayrollId",
+  as: "staffPayroll",
 });
 
 StaffPayroll.hasMany(StaffSalary, {
-  foreignKey: "payrollId",
-  as: "salaries",
+  foreignKey: "staffPayrollId",
+  as: "staffSalaries",
+});
+
+// COUNSELOR PAYROLL RELATION
+StaffSalary.belongsTo(CounselorPayroll, {
+  foreignKey: "counselorPayrollId",
+  as: "counselorPayroll",
+});
+
+CounselorPayroll.hasMany(StaffSalary, {
+  foreignKey: "counselorPayrollId",
+  as: "counselorSalaries",
 });
 
 module.exports = StaffSalary;

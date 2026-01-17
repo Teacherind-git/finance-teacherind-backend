@@ -245,7 +245,7 @@ exports.assignTutorSalaries = async (req, res) => {
     }
 
     const salaries = await TutorSalary.findAll({
-      where: { id: { [Op.in]: salaryIds }, assignedTo: 16 },
+      where: { id: { [Op.in]: salaryIds }, assignedTo: null },
     });
 
     if (!salaries.length) {
@@ -280,7 +280,7 @@ exports.getNonAssignedTutorSalaries = async (req, res) => {
   try {
     const { minAmount, maxAmount, fromDate, toDate } = req.query;
 
-    const whereCondition = { isDeleted: false, assignedTo: 16 };
+    const whereCondition = { isDeleted: false, assignedTo: null };
     whereCondition.status = { [Op.notIn]: ["Pending", "Paid"] };
 
     if (minAmount || maxAmount) {
