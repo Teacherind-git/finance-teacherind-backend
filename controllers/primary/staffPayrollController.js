@@ -69,8 +69,25 @@ exports.getAllPayrolls = async (req, res) => {
       offset: (page - 1) * limit,
     });
 
+    // ✅ Normalize JSON fields
+    const rows = payrolls.rows.map((item) => {
+      const data = item.toJSON();
+
+      return {
+        ...data,
+        earnings:
+          typeof data.earnings === "string"
+            ? JSON.parse(data.earnings || "[]")
+            : data.earnings,
+        deductions:
+          typeof data.deductions === "string"
+            ? JSON.parse(data.deductions || "[]")
+            : data.deductions,
+      };
+    });
+
     res.json({
-      data: payrolls.rows,
+      data: rows,
       pagination: {
         totalRecords: payrolls.count,
         page,
@@ -190,7 +207,6 @@ exports.getPayrollAudit = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
-
 
 /* =========================
    PAYROLL SUMMARY (CURRENT MONTH)
