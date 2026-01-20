@@ -170,6 +170,10 @@ exports.getPayRuleData = async (req, res) => {
       attributes: ["id", "config", "createdAt", "updatedAt"],
     });
 
+    if (payRule && payRule.config) {
+      payRule.config = JSON.parse(payRule.config);
+    }
+
     res.json({ data: payRule });
   } catch (error) {
     logger.error("Error fetching pay rule", error);
