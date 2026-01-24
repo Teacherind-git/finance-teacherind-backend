@@ -23,6 +23,7 @@ const counselorPayrollRoutes = require("./routes/primary/counselorPayrollRoutes"
 const expenseRoutes = require("./routes/primary/expenseRoutes");
 const tutorRoutes = require("./routes/primary/tutorSalary");
 const financeRoutes = require("./routes/primary/financeRoutes");
+const auditRoutes = require("./routes/primary/auditRoutes");
 
 dotenv.config();
 
@@ -33,7 +34,7 @@ app.use(
   cors({
     origin: process.env.FRONTEND_URL || "*",
     credentials: true,
-  })
+  }),
 );
 
 /* ---------------- Body parsers ---------------- */
@@ -62,6 +63,7 @@ app.use("/api/counselor-payroll", counselorPayrollRoutes);
 app.use("/api/expense", expenseRoutes);
 app.use("/api/tutor", tutorRoutes);
 app.use("/api/finance", financeRoutes);
+app.use("/api/payroll-audits", auditRoutes);
 
 /* ---------------- Error Handler ---------------- */
 app.use(errorHandler);

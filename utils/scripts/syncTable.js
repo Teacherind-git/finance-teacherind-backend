@@ -1,5 +1,5 @@
 const { sequelizePrimary } = require("../../config/db");
-const Expense = require("../../models/primary/StaffSalary"); // renamed for clarity
+const Expense = require("../../models/primary/PayrollAudit"); // renamed for clarity
 const logger = require("../../utils/logger"); // optional centralized logger
 
 (async () => {

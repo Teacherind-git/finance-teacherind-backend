@@ -171,7 +171,10 @@ exports.getPayRuleData = async (req, res) => {
     });
 
     if (payRule && payRule.config) {
-      payRule.config = JSON.parse(payRule.config);
+      // Parse ONLY if config is a string
+      if (typeof payRule.config === "string") {
+        payRule.config = JSON.parse(payRule.config);
+      }
     }
 
     res.json({ data: payRule });
@@ -180,3 +183,4 @@ exports.getPayRuleData = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+

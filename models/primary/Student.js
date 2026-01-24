@@ -12,6 +12,10 @@ const Student = sequelizePrimary.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    remark: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     studentId: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -46,7 +50,7 @@ const Student = sequelizePrimary.define(
   {
     tableName: "students",
     timestamps: true,
-  }
+  },
 );
 
 module.exports = Student;

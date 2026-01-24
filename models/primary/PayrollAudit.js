@@ -14,6 +14,11 @@ const PayrollAudit = sequelizePrimary.define(
       allowNull: false,
     },
 
+    staffType: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+
     action: {
       type: DataTypes.ENUM("CREATE", "UPDATE", "DELETE"),
       allowNull: false,

@@ -61,6 +61,11 @@ const StaffPayroll = sequelizePrimary.define(
       defaultValue: 0,
     },
 
+    remark: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+
     isDeleted: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
@@ -94,7 +99,7 @@ const StaffPayroll = sequelizePrimary.define(
         fields: ["staffId", "payrollMonth"],
       },
     ],
-  }
+  },
 );
 
 Staff.hasMany(StaffPayroll, { foreignKey: "staffId" });

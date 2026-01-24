@@ -30,13 +30,6 @@ const TutorPayroll = sequelizePrimary.define(
       defaultValue: 0,
     },
 
-    // ✅ Salary breakup
-    baseSalary: {
-      type: DataTypes.FLOAT,
-      allowNull: false,
-      defaultValue: 0,
-    },
-
     grossSalary: {
       type: DataTypes.FLOAT,
       allowNull: false,
@@ -69,6 +62,10 @@ const TutorPayroll = sequelizePrimary.define(
       defaultValue: 0,
     },
 
+    remark: {
+      type: DataTypes.TEXT,
+    },
+
     isDeleted: {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
@@ -94,7 +91,7 @@ const TutorPayroll = sequelizePrimary.define(
   {
     tableName: "tutor_payrolls",
     timestamps: true,
-  }
+  },
 );
 
 module.exports = TutorPayroll;

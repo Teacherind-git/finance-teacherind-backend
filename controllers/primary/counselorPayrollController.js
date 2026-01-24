@@ -1,5 +1,6 @@
 const User = require("../../models/secondary/User");
 const counselorPayroll = require("../../models/primary/CounselorPayroll");
+const PayrollAudit = require("../../models/primary/PayrollAudit");
 const logger = require("../../utils/logger");
 const { getPaginationParams } = require("../../utils/pagination");
 const { Op } = require("sequelize");
@@ -22,7 +23,7 @@ exports.getCounselorPayrollList = async (req, res) => {
         "totalDeductions",
         "payrollMonth",
       ],
-      "fullName"
+      "fullName",
     );
 
     /* -------------------------
@@ -68,6 +69,14 @@ exports.getCounselorPayrollList = async (req, res) => {
         payrollMonth: payroll?.payrollMonth,
 
         payrollExists: Boolean(payroll),
+        earnings:
+          typeof payroll.earnings === "string"
+            ? JSON.parse(payroll.earnings || "[]")
+            : payroll.earnings,
+        deductions:
+          typeof payroll.deductions === "string"
+            ? JSON.parse(payroll.deductions || "[]")
+            : payroll.deductions,
       };
     });
 
@@ -153,11 +162,20 @@ exports.createOrUpdatePayroll = async (req, res) => {
         netSalary: payload.netSalary,
         updatedBy: payload.userId,
       },
-      { returning: true }
+      { returning: true },
     );
 
     logger.info(`counselor payroll ${created ? "created" : "updated"}`, {
       counselorId: payload.counselorId,
+    });
+
+    await PayrollAudit.create({
+      payrollId: payroll.id,
+      staffId: payroll.counselorId,
+      staffType: "COUNSELOR",
+      action: "CREATE",
+      newData: payroll.toJSON(),
+      changedBy: req.user?.id,
     });
 
     res.json({
@@ -194,7 +212,7 @@ exports.getCounselorPayrollSummary = async (req, res) => {
       23,
       59,
       59,
-      999
+      999,
     );
 
     /* -------------------------
@@ -207,8 +225,7 @@ exports.getCounselorPayrollSummary = async (req, res) => {
       },
     });
 
-    console.log(totalCounselors,'oooo');
-    
+    console.log(totalCounselors, "oooo");
 
     /* -------------------------
        COMPLETED PAYROLLS
@@ -221,8 +238,7 @@ exports.getCounselorPayrollSummary = async (req, res) => {
         },
       },
     });
-    console.log('5555');
-    
+    console.log("5555");
 
     /* -------------------------
        PENDING PAYROLLS
@@ -264,6 +280,9 @@ exports.updateCounselorPayroll = async (req, res) => {
       });
     }
 
+    const oldData = payroll.toJSON();
+    const changedFields = Object.keys(req.body);
+
     await payroll.update({
       payrollMonth: payload.payrollMonth,
       baseSalary: payload.baseSalary,
@@ -277,6 +296,17 @@ exports.updateCounselorPayroll = async (req, res) => {
 
       netSalary: payload.netSalary,
       updatedBy: payload.userId,
+    });
+
+    await PayrollAudit.create({
+      payrollId: payroll.id,
+      staffId: payroll.counselorId,
+      staffType: "COUNSELOR",
+      action: "UPDATE",
+      oldData,
+      newData: payroll.toJSON(),
+      changedFields,
+      changedBy: req.user?.id,
     });
 
     logger.info("Counselor payroll updated", { payrollId: id });

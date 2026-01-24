@@ -35,6 +35,7 @@ exports.createPayroll = async (req, res) => {
       payrollId: payroll.id,
       staffId: payroll.staffId,
       action: "CREATE",
+      staffType: "STAFF",
       newData: payroll.toJSON(),
       changedBy: req.user?.id,
     });
@@ -144,6 +145,7 @@ exports.updatePayroll = async (req, res) => {
     await PayrollAudit.create({
       payrollId: payroll.id,
       staffId: payroll.staffId,
+      staffType: "STAFF",
       action: "UPDATE",
       oldData,
       newData: payroll.toJSON(),
@@ -225,7 +227,7 @@ exports.getCurrentMonthPayrollSummary = async (req, res) => {
       23,
       59,
       59,
-      999
+      999,
     );
 
     // 1️⃣ Total active staff
