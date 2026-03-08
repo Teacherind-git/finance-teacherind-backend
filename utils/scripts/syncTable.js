@@ -1,5 +1,6 @@
 const { sequelizePrimary } = require("../../config/db");
-const Expense = require("../../models/primary/PayrollAudit"); // renamed for clarity
+const Expense = require("../../models/primary/TutorPayrollItem"); // renamed for clarity
+const TutorPayroll = require("../../models/primary/TutorPayroll");
 const logger = require("../../utils/logger"); // optional centralized logger
 
 (async () => {
@@ -7,13 +8,24 @@ const logger = require("../../utils/logger"); // optional centralized logger
     await sequelizePrimary.authenticate();
     logger.info("✅ Database connection established.");
 
-    // Create or update table based on model
     await Expense.sync({ alter: true });
     logger.info("✅ Expense table created or updated successfully.");
 
+    await sequelizePrimary.transaction(async (transaction) => {
+      // Delete child rows first
+      await Expense.destroy({ where: {}, force: true, transaction });
+
+      // Then delete parent rows
+      await TutorPayroll.destroy({ where: {}, force: true, transaction });
+    });
+
+    logger.info("✅ All TutorPayroll and TutorPayrollItem rows deleted successfully.");
     process.exit(0);
   } catch (error) {
-    logger.error("❌ Error creating/updating Expense table:", { message: error.message, stack: error.stack });
+    logger.error("❌ Error deleting TutorPayroll/Items:", {
+      message: error.message,
+      stack: error.stack,
+    });
     process.exit(1);
   }
 })();

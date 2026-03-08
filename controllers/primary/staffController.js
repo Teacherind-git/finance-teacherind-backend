@@ -459,7 +459,21 @@ exports.getStaffSummary = async (req, res) => {
   try {
     logger.info("Fetching staff summary");
 
-    const [totalStaff, totalTutors, totalCounselors] = await Promise.all([
+    // Get all staff emails (primary DB)
+    const staffEmails = await Staff.findAll({
+      where: { isDeleted: false },
+      attributes: ["email"],
+      raw: true,
+    });
+
+    const emailList = staffEmails.map((s) => s.email);
+
+    const [
+      totalStaff,
+      totalTutors,
+      totalCounselors,
+      pendingStaff,
+    ] = await Promise.all([
       // Total staff (primary DB)
       Staff.count({
         where: { isDeleted: false },
@@ -474,6 +488,16 @@ exports.getStaffSummary = async (req, res) => {
       SecondaryUser.count({
         where: { role: 2 },
       }),
+
+      // ✅ Pending staff (Users not yet in Staff table)
+      User.count({
+        where: {
+          roleId: 3,
+          isDeleted: false,
+          email: { [Op.notIn]: emailList },
+          // status: true, // optional if you want only active users
+        },
+      }),
     ]);
 
     return res.status(200).json({
@@ -482,6 +506,7 @@ exports.getStaffSummary = async (req, res) => {
         totalStaff,
         totalTutors,
         totalCounselors,
+        pendingStaff,
       },
     });
   } catch (error) {

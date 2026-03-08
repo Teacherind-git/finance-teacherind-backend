@@ -4,7 +4,7 @@ const TutorPayroll = require("../../models/primary/TutorPayroll");
 const TutorPayrollItem = require("../../models/primary/TutorPayrollItem");
 const User = require("../../models/secondary/User");
 const Class = require("../../models/primary/Class");
-const Subject = require("../../models/primary/Subject");
+const Syllabus = require("../../models/primary/Syllabus");
 const PayrollAudit = require("../../models/primary/PayrollAudit");
 const logger = require("../../utils/logger"); // your logger instance
 const { getPaginationParams } = require("../../utils/pagination");
@@ -23,22 +23,43 @@ const failure = (res, message, status = 500) =>
 ===================================================== */
 exports.saveTutorPayroll = async (req, res) => {
   const transaction = await sequelizePrimary.transaction();
+  const requestId = req.id || Date.now();
+
   try {
+    logger.info("📥 saveTutorPayroll started", {
+      requestId,
+      params: req.params,
+      body: req.body,
+      userId: req.user?.id,
+    });
+
     const { id } = req.params;
     const { tutorId, payrollMonth, items = [], remark } = req.body;
 
     let payroll;
+    let action = "CREATE";
+    let oldData = null;
 
     /* ---------- UPDATE ---------- */
     if (id) {
+      action = "UPDATE";
+
       payroll = await TutorPayroll.findOne({
         where: { id, isDeleted: false },
+        transaction,
       });
 
       if (!payroll) {
+        logger.warn("Tutor payroll not found for update", {
+          requestId,
+          payrollId: id,
+        });
+
         await transaction.rollback();
         return failure(res, "Payroll not found", 404);
       }
+
+      oldData = payroll.toJSON();
 
       await payroll.update(
         {
@@ -48,11 +69,24 @@ exports.saveTutorPayroll = async (req, res) => {
         { transaction },
       );
 
+      logger.info("Tutor payroll header updated", {
+        requestId,
+        payrollId: payroll.id,
+      });
+
       // Soft delete existing items
       await TutorPayrollItem.update(
         { isDeleted: true },
-        { where: { tutorPayrollId: payroll.id }, transaction },
+        {
+          where: { tutorPayrollId: payroll.id },
+          transaction,
+        },
       );
+
+      logger.debug("Old payroll items soft deleted", {
+        requestId,
+        payrollId: payroll.id,
+      });
     } else {
       /* ---------- CREATE ---------- */
       payroll = await TutorPayroll.create(
@@ -65,34 +99,72 @@ exports.saveTutorPayroll = async (req, res) => {
         },
         { transaction },
       );
+
+      logger.info("Tutor payroll created", {
+        requestId,
+        payrollId: payroll.id,
+        tutorId,
+        payrollMonth,
+      });
     }
 
     /* ---------- INSERT ITEMS ---------- */
-    const payrollItems = items.map((item) => ({
-      tutorPayrollId: payroll.id,
-      classId: item.classId,
-      subjectId: item.subjectId,
-      basePay: item.basePay,
-      tutorId: tutorId,
-    }));
+    const payrollItems = items.map((item, index) => {
+      if (!item.classId || !item.syllabusId || !item.board || !item.slab) {
+        logger.warn("Invalid payroll item detected", {
+          requestId,
+          index,
+          item,
+        });
+
+        throw new Error("Invalid payroll item data");
+      }
+
+      return {
+        tutorPayrollId: payroll.id,
+        tutorId,
+        classId: item.classId,
+        syllabusId: item.syllabusId,
+        board: item.board,
+        slab: item.slab,
+        basePay: item.basePay,
+      };
+    });
 
     if (payrollItems.length) {
       await TutorPayrollItem.bulkCreate(payrollItems, { transaction });
+
+      logger.info("Tutor payroll items inserted", {
+        requestId,
+        payrollId: payroll.id,
+        itemCount: payrollItems.length,
+      });
     }
 
     await transaction.commit();
 
-    const oldData = payroll.toJSON();
-    const changedFields = Object.keys(req.body);
+    logger.info("✅ saveTutorPayroll committed successfully", {
+      requestId,
+      payrollId: payroll.id,
+      action,
+    });
+
+    /* ---------- AUDIT ---------- */
     await PayrollAudit.create({
       payrollId: payroll.id,
       staffId: tutorId,
       staffType: "TUTOR",
-      action: "UPDATE",
+      action,
       oldData,
       newData: payroll.toJSON(),
-      changedFields,
+      changedFields: Object.keys(req.body),
       changedBy: req.user?.id,
+    });
+
+    logger.info("Payroll audit log created", {
+      requestId,
+      payrollId: payroll.id,
+      action,
     });
 
     return success(
@@ -105,6 +177,13 @@ exports.saveTutorPayroll = async (req, res) => {
     );
   } catch (error) {
     await transaction.rollback();
+
+    logger.error("❌ saveTutorPayroll failed", {
+      requestId,
+      message: error.message,
+      stack: error.stack,
+    });
+
     return failure(res, error.message);
   }
 };
@@ -113,24 +192,30 @@ exports.saveTutorPayroll = async (req, res) => {
    GET ALL PAYROLLS
 ===================================================== */
 exports.getTutorPayrolls = async (req, res) => {
-  try {
-    const allowedSortFields = ["createdAt", "updatedAt", "fullName"];
+  const requestId = req.id || Date.now(); // helpful for tracing
 
-    const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
+  try {
+    logger.info("📥 getTutorPayrolls request started", {
+      requestId,
+      query: req.query,
+    });
+
+    const { page, limit, offset, sortOrder } = getPaginationParams(
       req,
-      allowedSortFields,
+      ["createdAt"],
       "createdAt",
     );
 
-    logger.info("Fetching tutor payrolls with pagination", {
+    logger.debug("Pagination params resolved", {
+      requestId,
       page,
       limit,
-      sortBy,
+      offset,
       sortOrder,
     });
 
     /* ----------------------------------------------------
-     * 1️⃣ Fetch paginated tutors (SECONDARY DB)
+     * 1️⃣ Fetch tutors (SECONDARY DB)
      * -------------------------------------------------- */
     const tutors = await User.findAll({
       where: { role: 3, status: 1 },
@@ -140,37 +225,54 @@ exports.getTutorPayrolls = async (req, res) => {
       raw: true,
     });
 
-    // Early return if no tutors
+    logger.info("Tutors fetched", {
+      requestId,
+      tutorCount: tutors.length,
+    });
+
     if (!tutors.length) {
+      logger.warn("No tutors found for payroll listing", {
+        requestId,
+        page,
+        limit,
+      });
+
       return res.json({
         success: true,
         data: [],
-        pagination: {
-          page,
-          limit,
-          totalRecords: 0,
-          totalPages: 0,
-        },
+        pagination: { page, limit, totalRecords: 0, totalPages: 0 },
       });
     }
 
     const tutorIds = tutors.map((t) => t.id);
 
+    logger.debug("Tutor IDs resolved", {
+      requestId,
+      tutorIds,
+    });
+
     /* ----------------------------------------------------
-     * 2️⃣ Fetch payrolls + items + class + subject (PRIMARY DB)
+     * 2️⃣ Fetch payrolls + items (PRIMARY DB)
      * -------------------------------------------------- */
     const payrolls = await TutorPayroll.findAll({
       where: {
+        tutorId: tutorIds,
         isDeleted: false,
-        tutorId: tutorIds, // 🔥 IMPORTANT
       },
       include: [
         {
           model: TutorPayrollItem,
           as: "items",
-          required: false,
           where: { isDeleted: false },
-          attributes: ["id", "classId", "subjectId", "basePay"],
+          required: false,
+          attributes: [
+            "id",
+            "classId",
+            "syllabusId",
+            "board",
+            "slab",
+            "basePay",
+          ],
           include: [
             {
               model: Class,
@@ -178,67 +280,82 @@ exports.getTutorPayrolls = async (req, res) => {
               attributes: ["id", "number"],
             },
             {
-              model: Subject,
-              as: "subject",
+              model: Syllabus,
+              as: "syllabus",
               attributes: ["id", "name"],
             },
           ],
         },
       ],
-      order:
-        sortBy === "fullName"
-          ? [["fullname", sortOrder]]
-          : [["createdAt", sortOrder]],
+      order: [["createdAt", sortOrder]],
+    });
+
+    logger.info("Payrolls fetched", {
+      requestId,
+      payrollCount: payrolls.length,
     });
 
     /* ----------------------------------------------------
-     * 3️⃣ Map payrolls by tutorId
+     * 3️⃣ Map payrolls
      * -------------------------------------------------- */
     const payrollMap = {};
-    payrolls.forEach((payroll) => {
-      payrollMap[payroll.tutorId] = payroll;
+    payrolls.forEach((p) => {
+      payrollMap[p.tutorId] = p;
+    });
+
+    logger.debug("Payroll map created", {
+      requestId,
+      mappedTutorCount: Object.keys(payrollMap).length,
     });
 
     /* ----------------------------------------------------
-     * 4️⃣ Build final response
+     * 4️⃣ Build response
      * -------------------------------------------------- */
     const result = tutors.map((tutor) => {
       const payroll = payrollMap[tutor.id];
+
+      if (!payroll) {
+        logger.warn("Payroll missing for tutor", {
+          requestId,
+          tutorId: tutor.id,
+        });
+      }
 
       return {
         id: payroll?.id ?? null,
         tutorId: tutor.id,
         fullName: tutor.fullname,
-
-        baseSalary: payroll?.baseSalary ?? 0,
         grossSalary: payroll?.grossSalary ?? 0,
-        totalEarnings: payroll?.totalEarnings ?? 0,
-        totalDeductions: payroll?.totalDeductions ?? 0,
         netSalary: payroll?.netSalary ?? 0,
-
         payrollMonth: payroll?.payrollMonth ?? null,
         payrollExists: !!payroll,
 
         payrollItems: payroll
           ? payroll.items.map((item) => ({
               id: item.id,
-              basePay: item.basePay,
-
               classId: item.classId,
               classNumber: item.class?.number ?? null,
-
-              subjectId: item.subjectId,
-              subjectName: item.subject?.name ?? null,
+              syllabusId: item.syllabusId,
+              syllabusName: item.syllabus?.name ?? null,
+              board: item.board,
+              slab: item.slab,
+              basePay: item.basePay,
             }))
           : [],
       };
     });
 
     /* ----------------------------------------------------
-     * 5️⃣ Total count for pagination
+     * 5️⃣ Pagination count
      * -------------------------------------------------- */
     const totalRecords = await User.count({
       where: { role: 3, status: 1 },
+    });
+
+    logger.info("📤 getTutorPayrolls completed successfully", {
+      requestId,
+      returnedRecords: result.length,
+      totalRecords,
     });
 
     return res.json({
@@ -252,7 +369,8 @@ exports.getTutorPayrolls = async (req, res) => {
       },
     });
   } catch (err) {
-    logger.error("Failed to fetch tutor payroll list", {
+    logger.error("❌ Failed to fetch tutor payroll list", {
+      requestId,
       message: err.message,
       stack: err.stack,
     });
@@ -268,29 +386,75 @@ exports.getTutorPayrolls = async (req, res) => {
    GET SINGLE PAYROLL
 ===================================================== */
 exports.getTutorPayroll = async (req, res) => {
+  const requestId = req.id || Date.now();
+
   try {
+    logger.info("📥 getTutorPayroll started", {
+      requestId,
+      payrollId: req.params.id,
+      userId: req.user?.id,
+    });
+
     const payroll = await TutorPayroll.findOne({
-      where: { id: req.params.id, isDeleted: false },
+      where: {
+        id: req.params.id,
+        isDeleted: false,
+      },
       include: [
         {
           model: TutorPayrollItem,
           as: "items",
           where: { isDeleted: false },
           required: false,
+          attributes: [
+            "id",
+            "classId",
+            "syllabusId",
+            "board",
+            "slab",
+            "basePay",
+          ],
           include: [
-            { model: ClassRange, as: "class" },
-            { model: Subject, as: "subject" },
+            {
+              model: Class,
+              as: "class",
+              attributes: ["id", "number"],
+            },
+            {
+              model: Syllabus,
+              as: "syllabus",
+              attributes: ["id", "name"],
+            },
           ],
         },
       ],
     });
 
     if (!payroll) {
+      logger.warn("Tutor payroll not found", {
+        requestId,
+        payrollId: req.params.id,
+      });
+
       return failure(res, "Payroll not found", 404);
     }
 
+    logger.info("Tutor payroll fetched successfully", {
+      requestId,
+      payrollId: payroll.id,
+      tutorId: payroll.tutorId,
+      itemCount: payroll.items?.length || 0,
+    });
+
     return success(res, "Tutor payroll details", payroll);
   } catch (error) {
+    logger.error("❌ getTutorPayroll failed", {
+      requestId,
+      payrollId: req.params.id,
+      message: error.message,
+      stack: error.stack,
+    });
+
     return failure(res, error.message);
   }
 };

@@ -25,5 +25,6 @@ router.delete(
   controller.deleteBasePay
 );
 router.get("/basepay", authorizeRoles("SuperAdmin", "Admin"), controller.getAllBasePays);
+router.get("/basepay-selection", authorizeRoles("SuperAdmin", "Admin", "User"), controller.getBasePayBySelection);
 
 module.exports = router;

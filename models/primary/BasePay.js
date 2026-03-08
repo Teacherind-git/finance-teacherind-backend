@@ -1,11 +1,16 @@
 const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
 const ClassRange = require("./ClassRange");
-const PayRule = require("./TutorPayRule");
+const Syllabus = require("./Syllabus");
 
 const BasePay = sequelizePrimary.define(
   "BasePay",
   {
+    slab: {
+      type: DataTypes.ENUM("slab1", "slab2", "slab3"),
+      allowNull: false,
+    },
+
     classRangeId: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -14,21 +19,28 @@ const BasePay = sequelizePrimary.define(
         key: "id",
       },
     },
+
+    syllabusId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: "syllabus",
+        key: "id",
+      },
+    },
+
+    board: {
+      type: DataTypes.ENUM("White Board", "Pen Tab"),
+      allowNull: false,
+    },
+
     basePay: {
       type: DataTypes.FLOAT,
       allowNull: false,
     },
-    payRuleId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: "pay_rules",
-        key: "id",
-      },
-    },
+
     isDeleted: {
       type: DataTypes.BOOLEAN,
-      allowNull: false,
       defaultValue: false,
     },
 
@@ -53,13 +65,24 @@ const BasePay = sequelizePrimary.define(
   {
     tableName: "base_pays",
     timestamps: true,
-  }
+    indexes: [
+      {
+        unique: true,
+        fields: ["slab", "classRangeId", "syllabusId", "board"],
+      },
+    ],
+  },
 );
 
-// ---- Associations ----
-BasePay.belongsTo(ClassRange, { foreignKey: "classRangeId", as: "classRange" });
-BasePay.belongsTo(PayRule, { foreignKey: "payRuleId", as: "payRule" });
+// ✅ Associations
+BasePay.belongsTo(ClassRange, {
+  foreignKey: "classRangeId",
+  as: "classRange",
+});
 
-PayRule.hasMany(BasePay, { foreignKey: "payRuleId", as: "basePays" });
+BasePay.belongsTo(Syllabus, {
+  foreignKey: "syllabusId",
+  as: "syllabus",
+});
 
 module.exports = BasePay;

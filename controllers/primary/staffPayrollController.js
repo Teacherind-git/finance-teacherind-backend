@@ -62,7 +62,7 @@ exports.getAllPayrolls = async (req, res) => {
       include: [
         {
           model: Staff,
-          attributes: ["id", "fullName", "employeeId"],
+          attributes: ["id", "fullName", "employeeId", "department"],
         },
       ],
       order: [["createdAt", "DESC"]],

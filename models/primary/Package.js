@@ -13,7 +13,8 @@ const Package = sequelizePrimary.define(
     name: { type: DataTypes.STRING, allowNull: false },
     price: { type: DataTypes.FLOAT, allowNull: false },
     classesPerMonth: { type: DataTypes.INTEGER, allowNull: false },
-    multiplier: { type: DataTypes.FLOAT, allowNull: true },
+    packageMultiplier: { type: DataTypes.FLOAT, allowNull: true },
+    multiMultiplier: { type: DataTypes.FLOAT, allowNull: true },
 
     description: { type: DataTypes.STRING, allowNull: true },
     tag: { type: DataTypes.STRING, allowNull: true },
@@ -46,7 +47,7 @@ const Package = sequelizePrimary.define(
   {
     tableName: "packages",
     timestamps: true,
-  }
+  },
 );
 
 module.exports = Package;

@@ -9,7 +9,7 @@ const TutorSalary = sequelizePrimary.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: "students",
+        model: "tutor_payrolls",
         key: "id",
       },
     },

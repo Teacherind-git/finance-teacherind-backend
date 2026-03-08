@@ -31,7 +31,7 @@ exports.getAllTutorSalaries = async (req, res) => {
         "dueDate",
         "finalDueDate",
         "createdAt",
-      ]
+      ],
     );
 
     const { rows: salaries, count } = await TutorSalary.findAndCountAll({
@@ -70,12 +70,17 @@ exports.getAllTutorSalaries = async (req, res) => {
       user: tutorMap[salary.tutorId] || { name: "", phone: "", email: "" },
       payroll: salary.payroll
         ? {
+            id: salary.payroll._id,
             totalClasses: salary.payroll.totalClasses,
             attendedClasses: salary.payroll.attendedClasses,
             missedClasses: salary.payroll.missedClasses,
             baseSalary: salary.payroll.baseSalary,
             grossSalary: salary.payroll.grossSalary,
             netSalary: salary.payroll.netSalary,
+            deductions: JSON.parse(salary.payroll.deductions || "[]"),
+            earnings: JSON.parse(salary.payroll.earnings || "[]"),
+            totalDeductions: salary.payroll.totalDeductions,
+            totalEarnings: salary.payroll.totalEarnings,
           }
         : null,
     }));
@@ -219,12 +224,10 @@ exports.downloadReceipt = async (req, res) => {
       message: error.message,
       stack: error.stack,
     });
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to generate tutor salary slip",
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate tutor salary slip",
+    });
   }
 };
 
@@ -256,7 +259,7 @@ exports.assignTutorSalaries = async (req, res) => {
 
     await TutorSalary.update(
       { assignedTo, assignDate: new Date(), updatedBy: req.user?.id || null },
-      { where: { id: { [Op.in]: salaries.map((s) => s.id) } } }
+      { where: { id: { [Op.in]: salaries.map((s) => s.id) } } },
     );
 
     return res.status(200).json({
@@ -350,12 +353,10 @@ exports.getNonAssignedTutorSalaries = async (req, res) => {
       message: error.message,
       stack: error.stack,
     });
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Internal server error",
-        error: error.message,
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message,
+    });
   }
 };

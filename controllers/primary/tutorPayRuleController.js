@@ -1,6 +1,9 @@
+const { Op } = require("sequelize");
 const PayRule = require("../../models/primary/TutorPayRule");
 const BasePay = require("../../models/primary/BasePay");
 const ClassRange = require("../../models/primary/ClassRange");
+const Syllabus = require("../../models/primary/Syllabus");
+const Class = require("../../models/primary/Class");
 const logger = require("../../utils/logger");
 
 /* ================= PAY RULE ================= */
@@ -41,32 +44,56 @@ exports.savePayRule = async (req, res) => {
 /* ================= BASE PAY ================= */
 exports.createBasePay = async (req, res) => {
   try {
-    logger.info("Creating base pay", {
-      classRangeId: req.body.classRange,
-      createdBy: req.user?.id,
-    });
+    logger.info("Create BasePay request received");
 
-    const payRule = await PayRule.findOne();
-    if (!payRule) {
-      logger.warn("BasePay creation failed – PayRule missing");
-      return res.status(400).json({
-        message: "Pay Rule must be created before adding BasePays.",
-      });
+    logger.debug("Request body: %o", req.body);
+
+    const { slab, classRange, syllabusId, board, basePay } = req.body;
+
+    if (!slab) {
+      logger.warn("Slab missing in request body", { body: req.body });
+      return res.status(400).json({ message: "slab is not defined" });
     }
 
-    const basePay = await BasePay.create({
-      classRangeId: req.body.classRange,
-      basePay: req.body.basePay,
-      payRuleId: payRule.id,
-      createdBy: req.user.id ?? 10,
-      updatedBy: req.user.id ?? 10,
+    if (!classRange || !syllabusId || !board || !basePay) {
+      logger.warn("Missing required fields", {
+        classRange,
+        syllabusId,
+        board,
+        basePay,
+      });
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const newBasePay = await BasePay.create({
+      slab,
+      classRangeId: Number(classRange),
+      syllabusId,
+      board,
+      basePay: Number(basePay),
+      createdBy: req.user?.id ?? 10,
+      updatedBy: req.user?.id ?? 10,
     });
 
-    logger.info("Base pay created", { basePayId: basePay.id });
+    logger.info("BasePay created successfully", {
+      id: newBasePay.id,
+      slab,
+      classRange,
+      syllabusId,
+      board,
+      basePay,
+    });
 
-    res.status(201).json({ message: "Base pay added", basePay });
+    res.status(201).json({
+      message: "Base Pay added successfully",
+      basePay: newBasePay,
+    });
   } catch (error) {
-    logger.error("Error creating base pay", error);
+    logger.error("Error creating BasePay", {
+      error: error.message,
+      stack: error.stack,
+    });
+
     res.status(500).json({ message: error.message });
   }
 };
@@ -74,29 +101,25 @@ exports.createBasePay = async (req, res) => {
 exports.updateBasePay = async (req, res) => {
   try {
     const { id } = req.params;
+    const { basePay } = req.body;
 
-    logger.info("Updating base pay", {
-      basePayId: id,
-      updatedBy: req.user?.id,
-    });
-
-    const basePay = await BasePay.findByPk(id);
-    if (!basePay) {
-      logger.warn(`Base pay not found: ${id}`);
-      return res.status(404).json({ message: "Base pay not found" });
+    const record = await BasePay.findByPk(id);
+    if (!record || record.isDeleted) {
+      return res.status(404).json({ message: "Base Pay not found" });
     }
 
-    await basePay.update({
-      classRangeId: req.body.classRange,
-      basePay: req.body.basePay,
-      updatedBy: req.user.id ?? 10,
+    await record.update({
+      basePay,
+      updatedBy: req.user?.id ?? 10,
     });
 
-    logger.info("Base pay updated", { basePayId: basePay.id });
+    logger.info("Base pay updated", { basePayId: record.id });
 
-    res.json({ message: "Base pay updated", basePay });
+    res.json({
+      message: "Base Pay updated successfully",
+      basePay: record,
+    });
   } catch (error) {
-    logger.error("Error updating base pay", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -141,12 +164,17 @@ exports.getAllBasePays = async (req, res) => {
     logger.info("Fetching all base pays");
 
     const basePays = await BasePay.findAll({
-      where: { isDeleted: false }, // ✅ exclude deleted
+      where: { isDeleted: false },
       include: [
         {
           model: ClassRange,
           as: "classRange",
           attributes: ["id", "label"],
+        },
+        {
+          model: Syllabus,
+          as: "syllabus",
+          attributes: ["id", "name"],
         },
       ],
       order: [["classRangeId", "ASC"]],
@@ -154,10 +182,119 @@ exports.getAllBasePays = async (req, res) => {
 
     logger.info(`Base pays fetched: ${basePays.length}`);
 
-    res.json({ basePays });
+    const grouped = {
+      slab1: [],
+      slab2: [],
+      slab3: [],
+    };
+
+    basePays.forEach((item) => {
+      if (grouped[item.slab]) {
+        grouped[item.slab].push(item);
+      } else {
+        logger.warn("Unknown slab found in BasePay", {
+          id: item.id,
+          slab: item.slab,
+        });
+      }
+    });
+
+    res.status(200).json({ data: grouped });
   } catch (error) {
-    logger.error("Error fetching base pays", error);
+    logger.error("Error fetching base pays", {
+      error: error.message,
+      stack: error.stack,
+    });
+
     res.status(500).json({ message: error.message });
+  }
+};
+
+exports.getBasePayBySelection = async (req, res) => {
+  logger.info("Get BasePay request received");
+  logger.debug("Query params: %o", req.query);
+
+  try {
+    const { classId, syllabusId, board, slab } = req.query;
+
+    if (!classId || !syllabusId || !board || !slab) {
+      logger.warn("Missing required query params", {
+        classId,
+        syllabusId,
+        board,
+        slab,
+      });
+      return res.status(400).json({ message: "Missing required parameters" });
+    }
+
+    // 1. Fetch class
+    const selectedClass = await Class.findByPk(classId);
+
+    if (!selectedClass) {
+      logger.warn("Class not found", { classId });
+      return res.status(404).json({ message: "Class not found" });
+    }
+
+    logger.debug("Selected class found", {
+      classId,
+      classNumber: selectedClass.number,
+    });
+
+    // 2. Find class range
+    const classRange = await ClassRange.findOne({
+      where: {
+        fromClass: { [Op.lte]: selectedClass.number },
+        toClass: { [Op.gte]: selectedClass.number },
+        isDeleted: false,
+      },
+    });
+
+    if (!classRange) {
+      logger.warn("No ClassRange matched", {
+        classNumber: selectedClass.number,
+      });
+      return res.json({ basePay: 0 });
+    }
+
+    logger.debug("ClassRange matched", {
+      classRangeId: classRange.id,
+      fromClass: classRange.fromClass,
+      toClass: classRange.toClass,
+    });
+
+    // 3. Find base pay
+    const basePay = await BasePay.findOne({
+      where: {
+        slab,
+        syllabusId,
+        board,
+        classRangeId: classRange.id,
+      },
+    });
+
+    if (!basePay) {
+      logger.warn("BasePay not configured", {
+        slab,
+        syllabusId,
+        board,
+        classRangeId: classRange.id,
+      });
+      return res.json({ basePay: 0 });
+    }
+
+    logger.info("BasePay fetched successfully", {
+      basePayId: basePay.id,
+      amount: basePay.basePay,
+    });
+
+    return res.json({ basePay: basePay.basePay });
+  } catch (error) {
+    logger.error("Error fetching BasePay", {
+      error: error.message,
+      stack: error.stack,
+    });
+
+    return res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -183,4 +320,3 @@ exports.getPayRuleData = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-

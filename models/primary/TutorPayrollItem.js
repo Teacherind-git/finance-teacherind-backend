@@ -2,7 +2,7 @@ const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
 const TutorPayroll = require("./TutorPayroll");
 const Class = require("./Class");
-const Subject = require("./Subject");
+const Syllabus = require("./Syllabus");
 
 const TutorPayrollItem = sequelizePrimary.define(
   "TutorPayrollItem",
@@ -22,19 +22,32 @@ const TutorPayrollItem = sequelizePrimary.define(
       allowNull: false,
     },
 
+    /* 🔹 NEW STRUCTURE */
+
     classId: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
 
-    subjectId: {
+    syllabusId: {
       type: DataTypes.INTEGER,
       allowNull: false,
     },
 
+    board: {
+      type: DataTypes.ENUM("White Board", "Pen Tab"),
+      allowNull: false,
+    },
+
+    slab: {
+      type: DataTypes.ENUM("slab1", "slab2", "slab3"),
+      allowNull: false,
+    },
+
+    /* 🔹 Snapshot of BasePay */
     basePay: {
       type: DataTypes.FLOAT,
-      defaultValue: 0,
+      allowNull: false,
     },
 
     isDeleted: {
@@ -45,13 +58,13 @@ const TutorPayrollItem = sequelizePrimary.define(
   {
     tableName: "tutor_payroll_items",
     timestamps: true,
-  },
+  }
 );
 
 TutorPayroll.hasMany(TutorPayrollItem, { as: "items", foreignKey: "tutorPayrollId" });
 TutorPayrollItem.belongsTo(TutorPayroll, { foreignKey: "tutorPayrollId" });
 
 TutorPayrollItem.belongsTo(Class, { as: "class", foreignKey: "classId" });
-TutorPayrollItem.belongsTo(Subject, { as: "subject", foreignKey: "subjectId" });
+TutorPayrollItem.belongsTo(Syllabus, { as: "syllabus", foreignKey: "syllabusId" });
 
 module.exports = TutorPayrollItem;

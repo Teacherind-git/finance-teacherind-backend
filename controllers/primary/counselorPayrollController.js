@@ -60,6 +60,7 @@ exports.getCounselorPayrollList = async (req, res) => {
         id: payroll?.id,
         counselorId: c.id,
         fullName: c.fullname,
+        department: c.department ?? "AcademicCounselor",
 
         baseSalary: payroll?.baseSalary ?? 0,
         grossSalary: payroll?.grossSalary ?? 0,
@@ -224,9 +225,6 @@ exports.getCounselorPayrollSummary = async (req, res) => {
         status: 1, // active
       },
     });
-
-    console.log(totalCounselors, "oooo");
-
     /* -------------------------
        COMPLETED PAYROLLS
     -------------------------- */
@@ -238,8 +236,6 @@ exports.getCounselorPayrollSummary = async (req, res) => {
         },
       },
     });
-    console.log("5555");
-
     /* -------------------------
        PENDING PAYROLLS
     -------------------------- */
