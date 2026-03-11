@@ -46,54 +46,30 @@ exports.createBasePay = async (req, res) => {
   try {
     logger.info("Create BasePay request received");
 
-    logger.debug("Request body: %o", req.body);
+    const { slab, classRange, syllabusIds, board, basePay } = req.body;
 
-    const { slab, classRange, syllabusId, board, basePay } = req.body;
-
-    if (!slab) {
-      logger.warn("Slab missing in request body", { body: req.body });
-      return res.status(400).json({ message: "slab is not defined" });
-    }
-
-    if (!classRange || !syllabusId || !board || !basePay) {
-      logger.warn("Missing required fields", {
-        classRange,
-        syllabusId,
-        board,
-        basePay,
-      });
+    if (!slab || !classRange || !syllabusIds || !board || !basePay) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
     const newBasePay = await BasePay.create({
       slab,
       classRangeId: Number(classRange),
-      syllabusId,
       board,
       basePay: Number(basePay),
       createdBy: req.user?.id ?? 10,
       updatedBy: req.user?.id ?? 10,
     });
 
-    logger.info("BasePay created successfully", {
-      id: newBasePay.id,
-      slab,
-      classRange,
-      syllabusId,
-      board,
-      basePay,
-    });
+    // attach syllabus
+    await newBasePay.setSyllabus(syllabusIds);
 
     res.status(201).json({
       message: "Base Pay added successfully",
       basePay: newBasePay,
     });
   } catch (error) {
-    logger.error("Error creating BasePay", {
-      error: error.message,
-      stack: error.stack,
-    });
-
+    logger.error("Error creating BasePay", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -101,9 +77,10 @@ exports.createBasePay = async (req, res) => {
 exports.updateBasePay = async (req, res) => {
   try {
     const { id } = req.params;
-    const { basePay } = req.body;
+    const { basePay, syllabusIds } = req.body;
 
     const record = await BasePay.findByPk(id);
+
     if (!record || record.isDeleted) {
       return res.status(404).json({ message: "Base Pay not found" });
     }
@@ -113,7 +90,9 @@ exports.updateBasePay = async (req, res) => {
       updatedBy: req.user?.id ?? 10,
     });
 
-    logger.info("Base pay updated", { basePayId: record.id });
+    if (syllabusIds) {
+      await record.setSyllabus(syllabusIds);
+    }
 
     res.json({
       message: "Base Pay updated successfully",
@@ -128,26 +107,18 @@ exports.deleteBasePay = async (req, res) => {
   try {
     const { id } = req.params;
 
-    logger.info("Soft deleting base pay", { basePayId: id });
-
     const basePay = await BasePay.findOne({
-      where: {
-        id,
-        isDeleted: false,
-      },
+      where: { id, isDeleted: false },
     });
 
     if (!basePay) {
-      logger.warn(`Base pay not found for delete: ${id}`);
       return res.status(404).json({ message: "Base pay not found" });
     }
 
     await basePay.update({
       isDeleted: true,
-      updatedBy: req.user?.id || null, // ✅ optional audit
+      updatedBy: req.user?.id || null,
     });
-
-    logger.info("Base pay soft deleted", { basePayId: id });
 
     res.json({
       success: true,
@@ -161,10 +132,30 @@ exports.deleteBasePay = async (req, res) => {
 
 exports.getAllBasePays = async (req, res) => {
   try {
-    logger.info("Fetching all base pays");
+    const { search } = req.query;
+
+    let whereCondition = { isDeleted: false };
+
+    if (search) {
+      const conditions = [
+        { slab: { [Op.like]: `%${search}%` } },
+        { board: { [Op.like]: `%${search}%` } },
+        { "$classRange.label$": { [Op.like]: `%${search}%` } },
+        { "$syllabus.name$": { [Op.like]: `%${search}%` } },
+      ];
+
+      // if search is numeric → match basePay
+      if (!isNaN(search)) {
+        conditions.push({
+          basePay: parseFloat(search),
+        });
+      }
+
+      whereCondition[Op.or] = conditions;
+    }
 
     const basePays = await BasePay.findAll({
-      where: { isDeleted: false },
+      where: whereCondition,
       include: [
         {
           model: ClassRange,
@@ -175,12 +166,11 @@ exports.getAllBasePays = async (req, res) => {
           model: Syllabus,
           as: "syllabus",
           attributes: ["id", "name"],
+          through: { attributes: [] },
         },
       ],
       order: [["classRangeId", "ASC"]],
     });
-
-    logger.info(`Base pays fetched: ${basePays.length}`);
 
     const grouped = {
       slab1: [],
@@ -189,23 +179,12 @@ exports.getAllBasePays = async (req, res) => {
     };
 
     basePays.forEach((item) => {
-      if (grouped[item.slab]) {
-        grouped[item.slab].push(item);
-      } else {
-        logger.warn("Unknown slab found in BasePay", {
-          id: item.id,
-          slab: item.slab,
-        });
-      }
+      grouped[item.slab].push(item);
     });
 
     res.status(200).json({ data: grouped });
   } catch (error) {
-    logger.error("Error fetching base pays", {
-      error: error.message,
-      stack: error.stack,
-    });
-
+    logger.error("Error fetching base pays", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -266,10 +245,19 @@ exports.getBasePayBySelection = async (req, res) => {
     const basePay = await BasePay.findOne({
       where: {
         slab,
-        syllabusId,
         board,
         classRangeId: classRange.id,
       },
+      include: [
+        {
+          model: Syllabus,
+          as: "syllabus",
+          where: { id: Number(syllabusId) },
+          attributes: [],
+          through: { attributes: [] },
+          required: true,
+        },
+      ],
     });
 
     if (!basePay) {

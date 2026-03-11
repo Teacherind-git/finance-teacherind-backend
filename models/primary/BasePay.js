@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
 const ClassRange = require("./ClassRange");
+const BasePaySyllabus = require("./BasePaySyllabus");
 const Syllabus = require("./Syllabus");
 
 const BasePay = sequelizePrimary.define(
@@ -16,15 +17,6 @@ const BasePay = sequelizePrimary.define(
       allowNull: false,
       references: {
         model: "class_ranges",
-        key: "id",
-      },
-    },
-
-    syllabusId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: "syllabus",
         key: "id",
       },
     },
@@ -68,7 +60,7 @@ const BasePay = sequelizePrimary.define(
     indexes: [
       {
         unique: true,
-        fields: ["slab", "classRangeId", "syllabusId", "board"],
+        fields: ["slab", "classRangeId", "board", "basePay"]
       },
     ],
   },
@@ -80,9 +72,15 @@ BasePay.belongsTo(ClassRange, {
   as: "classRange",
 });
 
-BasePay.belongsTo(Syllabus, {
-  foreignKey: "syllabusId",
+BasePay.belongsToMany(Syllabus, {
+  through: BasePaySyllabus,
+  foreignKey: "basePayId",
   as: "syllabus",
+});
+
+Syllabus.belongsToMany(BasePay, {
+  through: BasePaySyllabus,
+  foreignKey: "syllabusId",
 });
 
 module.exports = BasePay;

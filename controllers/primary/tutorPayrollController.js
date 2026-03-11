@@ -6,6 +6,7 @@ const User = require("../../models/secondary/User");
 const Class = require("../../models/primary/Class");
 const Syllabus = require("../../models/primary/Syllabus");
 const PayrollAudit = require("../../models/primary/PayrollAudit");
+const TutorSalary = require("../../models/primary/TutorSalary");
 const logger = require("../../utils/logger"); // your logger instance
 const { getPaginationParams } = require("../../utils/pagination");
 
@@ -493,5 +494,99 @@ exports.deleteTutorPayroll = async (req, res) => {
   } catch (error) {
     await transaction.rollback();
     return failure(res, error.message);
+  }
+};
+
+exports.updateTutorPayroll = async (req, res) => {
+  const transaction = await sequelizePrimary.transaction();
+
+  try {
+    const { id } = req.params;
+
+    const {
+      payrollMonth,
+      tutorId,
+      earnings,
+      deductions,
+      totalEarnings,
+      totalDeductions,
+      grossSalary,
+      netSalary,
+      remark,
+      baseSalary,
+    } = req.body;
+
+    logger.info("Updating tutor payroll", { id });
+
+    const payroll = await TutorPayroll.findOne({
+      where: { id, isDeleted: false },
+      transaction,
+    });
+
+    if (!payroll) {
+      await transaction.rollback();
+      return res.status(404).json({ message: "Payroll not found" });
+    }
+
+    /* =============================
+       UPDATE PAYROLL
+    ============================== */
+
+    await payroll.update(
+      {
+        payrollMonth,
+        tutorId,
+        earnings,
+        deductions,
+        totalEarnings,
+        totalDeductions,
+        grossSalary,
+        netSalary,
+        remark,
+        updatedBy: req.user?.id || null,
+      },
+      { transaction }
+    );
+
+    /* =============================
+       UPDATE SALARY ENTRY
+    ============================== */
+
+    const salary = await TutorSalary.findOne({
+      where: {
+        payrollId: id,
+        isDeleted: false,
+      },
+      transaction,
+    });
+
+    if (salary) {
+      await salary.update(
+        {
+          amount: netSalary,
+          payrollMonth,
+          updatedBy: req.user?.id || null,
+        },
+        { transaction }
+      );
+    }
+
+    await transaction.commit();
+
+    logger.info("Tutor payroll updated successfully", { id });
+
+    return res.status(200).json({
+      message: "Tutor payroll updated successfully",
+      payroll,
+    });
+  } catch (error) {
+    await sequelizePrimary.transaction.rollback();
+
+    logger.error("Error updating tutor payroll", error);
+
+    return res.status(500).json({
+      message: "Failed to update tutor payroll",
+      error: error.message,
+    });
   }
 };

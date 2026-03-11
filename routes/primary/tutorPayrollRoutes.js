@@ -31,4 +31,6 @@ router.delete(
   controller.deleteTutorPayroll,
 ); // DELETE
 
+router.put("/salary/:id", controller.updateTutorPayroll);
+
 module.exports = router;

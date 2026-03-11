@@ -7,6 +7,7 @@ const { sequelizePrimary } = require("../../config/db");
 const logger = require("../../utils/logger");
 const axios = require("axios");
 const { getPaginationParams } = require("../../utils/pagination");
+const { Op } = require("sequelize");
 
 /* ================= CREATE STUDENT ================= */
 exports.createStudent = async (req, res) => {
@@ -25,8 +26,8 @@ exports.createStudent = async (req, res) => {
     // 1. Create student
     // -----------------------------
     const student = await Student.create(
-      { name, contact, createdBy: userId },
-      { transaction: t }
+      { name, contact, createdBy: userId, updatedBy: userId },
+      { transaction: t },
     );
 
     const detailsToCreate = details.map((d) => ({
@@ -60,7 +61,7 @@ exports.createStudent = async (req, res) => {
 
       const externalResponse = await axios.post(
         "https://ai.teacherind.com/api/add-student",
-        payload
+        payload,
       );
 
       logger.info("External student created", {
@@ -95,7 +96,6 @@ exports.createStudent = async (req, res) => {
 /* ================= GET ALL STUDENTS ================= */
 exports.getAllStudents = async (req, res) => {
   try {
-    // ✅ allowed sortable fields
     const allowedSortFields = [
       "createdAt",
       "updatedAt",
@@ -104,13 +104,13 @@ exports.getAllStudents = async (req, res) => {
       "status",
     ];
 
-    const {
-      page,
-      limit,
-      offset,
-      sortBy,
-      sortOrder,
-    } = getPaginationParams(req, allowedSortFields, "createdAt");
+    const { search } = req.query;
+
+    const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
+      req,
+      allowedSortFields,
+      "createdAt",
+    );
 
     logger.info("Fetching students with pagination & sorting", {
       page,
@@ -119,37 +119,44 @@ exports.getAllStudents = async (req, res) => {
       sortOrder,
     });
 
-    const { rows: students, count } =
-      await Student.findAndCountAll({
-        where: { isDeleted: false },
-        include: [
-          {
-            model: StudentDetail,
-            as: "details",
-            include: [
-              {
-                model: ClassRange,
-                as: "class_range",
-                attributes: ["id", "label"],
-              },
-              {
-                model: Subject,
-                as: "subject",
-                attributes: ["id", "name"],
-              },
-              {
-                model: Package,
-                as: "package",
-                attributes: ["id", "name"],
-              },
-            ],
-          },
-        ],
-        limit,
-        offset,
-        order: [[sortBy, sortOrder]],
-        distinct: true, // ✅ important with include
-      });
+    let whereCondition = {
+      isDeleted: false,
+    };
+
+    if (search) {
+      whereCondition[Op.or] = [{ name: { [Op.like]: `%${search}%` } }];
+    }
+
+    const { rows: students, count } = await Student.findAndCountAll({
+      where: whereCondition,
+      include: [
+        {
+          model: StudentDetail,
+          as: "details",
+          include: [
+            {
+              model: ClassRange,
+              as: "class_range",
+              attributes: ["id", "label"],
+            },
+            {
+              model: Subject,
+              as: "subject",
+              attributes: ["id", "name"],
+            },
+            {
+              model: Package,
+              as: "package",
+              attributes: ["id", "name"],
+            },
+          ],
+        },
+      ],
+      limit,
+      offset,
+      order: [[sortBy, sortOrder]],
+      distinct: true,
+    });
 
     logger.info(`Students fetched: ${students.length}`);
 
@@ -173,7 +180,6 @@ exports.getAllStudents = async (req, res) => {
     });
   }
 };
-
 
 /* ================= GET SINGLE STUDENT ================= */
 exports.getStudent = async (req, res) => {
@@ -224,7 +230,7 @@ exports.updateStudent = async (req, res) => {
 
     await student.update(
       { name, contact, updatedBy: userId },
-      { transaction: t }
+      { transaction: t },
     );
 
     await StudentDetail.destroy({
@@ -285,7 +291,7 @@ exports.deleteStudent = async (req, res) => {
         status: "Inactive", // ✅ optional
         updatedBy: req.user?.id || null,
       },
-      { transaction: t }
+      { transaction: t },
     );
 
     await t.commit();
@@ -311,18 +317,17 @@ exports.getStudentSummary = async (req, res) => {
   try {
     logger.info("Fetching student summary");
 
-    const [totalStudents, activeStudents, onboardStudents] =
-      await Promise.all([
-        Student.count({
-          where: { isDeleted: false },
-        }),
-        Student.count({
-          where: { isDeleted: false, status: "Active" },
-        }),
-        Student.count({
-          where: { isDeleted: false, status: "Onboard" },
-        }),
-      ]);
+    const [totalStudents, activeStudents, onboardStudents] = await Promise.all([
+      Student.count({
+        where: { isDeleted: false },
+      }),
+      Student.count({
+        where: { isDeleted: false, status: "Active" },
+      }),
+      Student.count({
+        where: { isDeleted: false, status: "Onboard" },
+      }),
+    ]);
 
     res.status(200).json({
       success: true,

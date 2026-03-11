@@ -61,7 +61,7 @@ async function createClassRanges() {
     ================================ */
     for (const range of ranges) {
       const hasClasses = classNumbers.some(
-        (num) => num >= range.fromClass && num <= range.toClass
+        (num) => num >= range.fromClass && num <= range.toClass,
       );
 
       if (!hasClasses) {
@@ -92,6 +92,7 @@ async function createClassRanges() {
           fromClass: range.fromClass,
           toClass: range.toClass,
           createdBy: adminUserId,
+          updatedBy: adminUserId,
         });
 
         logger.info("Created class range", {

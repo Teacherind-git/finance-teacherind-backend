@@ -6,7 +6,7 @@ const logger = require("../../utils/logger");
 /* ================= GET ALL USERS ================= */
 exports.getAllUsers = async (req, res) => {
   try {
-    const { type } = req.query;
+    const { type, search } = req.query;
 
     /* ---------- Pagination & Sorting Defaults ---------- */
     const page = parseInt(req.query.page, 10) || 1;
@@ -41,7 +41,21 @@ exports.getAllUsers = async (req, res) => {
       },
     ];
 
-    let whereCondition = { isDeleted: false };
+    let whereCondition = {
+      [Op.and]: [{ isDeleted: false }],
+    };
+
+    if (search) {
+      whereCondition[Op.and].push({
+        [Op.or]: [
+          { firstName: { [Op.like]: `%${search}%` } },
+          { lastName: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } },
+          { department: { [Op.like]: `%${search}%` } },
+          { position: { [Op.like]: `%${search}%` } },
+        ],
+      });
+    }
 
     /* ---------- Normal User ---------- */
     if (req.user.role.name === "User") {

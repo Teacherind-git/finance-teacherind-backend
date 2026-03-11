@@ -54,30 +54,32 @@ exports.getCounselorPayrollList = async (req, res) => {
        MERGE RESULT
     -------------------------- */
     let result = counselors.map((c) => {
-      const payroll = payrollMap[c.id];
+      const payroll = payrollMap[c.id] || {};
 
       return {
-        id: payroll?.id,
+        id: payroll.id || null,
         counselorId: c.id,
         fullName: c.fullname,
         department: c.department ?? "AcademicCounselor",
 
-        baseSalary: payroll?.baseSalary ?? 0,
-        grossSalary: payroll?.grossSalary ?? 0,
-        totalEarnings: payroll?.totalEarnings ?? 0,
-        totalDeductions: payroll?.totalDeductions ?? 0,
-        netSalary: payroll?.netSalary ?? 0,
-        payrollMonth: payroll?.payrollMonth,
+        baseSalary: payroll.baseSalary ?? 0,
+        grossSalary: payroll.grossSalary ?? 0,
+        totalEarnings: payroll.totalEarnings ?? 0,
+        totalDeductions: payroll.totalDeductions ?? 0,
+        netSalary: payroll.netSalary ?? 0,
+        payrollMonth: payroll.payrollMonth ?? null,
 
-        payrollExists: Boolean(payroll),
+        payrollExists: Boolean(payrollMap[c.id]),
+
         earnings:
           typeof payroll.earnings === "string"
             ? JSON.parse(payroll.earnings || "[]")
-            : payroll.earnings,
+            : payroll.earnings || [],
+
         deductions:
           typeof payroll.deductions === "string"
             ? JSON.parse(payroll.deductions || "[]")
-            : payroll.deductions,
+            : payroll.deductions || [],
       };
     });
 

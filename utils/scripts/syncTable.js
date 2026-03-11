@@ -1,5 +1,5 @@
 const { sequelizePrimary } = require("../../config/db");
-const Expense = require("../../models/primary/TutorPayrollItem"); // renamed for clarity
+const Expense = require("../../models/primary/BasePaySyllabus"); // renamed for clarity
 const TutorPayroll = require("../../models/primary/TutorPayroll");
 const logger = require("../../utils/logger"); // optional centralized logger
 
@@ -11,13 +11,13 @@ const logger = require("../../utils/logger"); // optional centralized logger
     await Expense.sync({ alter: true });
     logger.info("✅ Expense table created or updated successfully.");
 
-    await sequelizePrimary.transaction(async (transaction) => {
-      // Delete child rows first
-      await Expense.destroy({ where: {}, force: true, transaction });
+    // await sequelizePrimary.transaction(async (transaction) => {
+    //   // Delete child rows first
+    //   await Expense.destroy({ where: {}, force: true, transaction });
 
-      // Then delete parent rows
-      await TutorPayroll.destroy({ where: {}, force: true, transaction });
-    });
+    //   // Then delete parent rows
+    //   await TutorPayroll.destroy({ where: {}, force: true, transaction });
+    // });
 
     logger.info("✅ All TutorPayroll and TutorPayrollItem rows deleted successfully.");
     process.exit(0);

@@ -70,15 +70,15 @@ exports.getAllTutorSalaries = async (req, res) => {
       user: tutorMap[salary.tutorId] || { name: "", phone: "", email: "" },
       payroll: salary.payroll
         ? {
-            id: salary.payroll._id,
+            id: salary.payroll.id,
             totalClasses: salary.payroll.totalClasses,
             attendedClasses: salary.payroll.attendedClasses,
             missedClasses: salary.payroll.missedClasses,
             baseSalary: salary.payroll.baseSalary,
             grossSalary: salary.payroll.grossSalary,
             netSalary: salary.payroll.netSalary,
-            deductions: JSON.parse(salary.payroll.deductions || "[]"),
-            earnings: JSON.parse(salary.payroll.earnings || "[]"),
+            deductions: salary.payroll.deductions || [],
+            earnings: salary.payroll.earnings || [],
             totalDeductions: salary.payroll.totalDeductions,
             totalEarnings: salary.payroll.totalEarnings,
           }

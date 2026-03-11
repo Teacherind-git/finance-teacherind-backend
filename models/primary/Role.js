@@ -18,24 +18,7 @@ const Role = sequelizePrimary.define(
       type: DataTypes.JSON, // store array of strings as JSON
       allowNull: true, // optional
       defaultValue: [], // default empty array
-    },
-    createdBy: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
-    },
-
-    updatedBy: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      references: {
-        model: "users",
-        key: "id",
-      },
-    },
+    }
   },
   {
     tableName: "roles",

@@ -51,15 +51,21 @@ exports.create = async (req, res) => {
       userId: req.user?.id,
     });
 
-    const userId = req.user?.id ?? 10; // fallback
+    const userId = req.user?.id ?? 10;
 
-    const pkg = await Package.create({
+    const data = {
       ...req.body,
+      extraExamPrice: Number(req.body.extraExamPrice) || 0,
+      price: Number(req.body.price) || 0,
+      packageMultiplier: Number(req.body.packageMultiplier) || 0,
+      multiMultiplier: Number(req.body.multiMultiplier) || 0,
       createdBy: userId,
       updatedBy: userId,
-    });
+    };
 
-    logger.info(`Package created`, {
+    const pkg = await Package.create(data);
+
+    logger.info("Package created", {
       id: pkg.id,
       createdBy: userId,
     });

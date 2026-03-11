@@ -3,6 +3,7 @@ const Staff = require("../../../models/primary/Staff");
 const SecondaryUser = require("../../../models/secondary/User");
 const { Op } = require("sequelize");
 const StaffPayroll = require("../../../models/primary/StaffPayroll");
+const CounselorPayroll = require("../../../models/primary/CounselorPayroll");
 const { getPaginationParams } = require("../../../utils/pagination");
 const puppeteer = require("puppeteer");
 const salarySlipTemplate = require("../../../templates/staffSalarySlipTemplate");
@@ -15,9 +16,11 @@ exports.getAllSalaries = async (req, res) => {
   try {
     const whereCondition = { isDeleted: false };
 
+    // Department based filtering
     if (req.user?.department === "HR") {
       whereCondition.status = "Pending";
     }
+
     if (req.user?.department === "Finance") {
       whereCondition.status = { [Op.ne]: "Pending" };
     }
@@ -32,53 +35,125 @@ exports.getAllSalaries = async (req, res) => {
         "dueDate",
         "finalDueDate",
         "createdAt",
-      ]
+      ],
     );
+
+    /* ===============================
+       FETCH SALARIES
+    =============================== */
 
     const { rows: salaries, count } = await StaffSalary.findAndCountAll({
       where: whereCondition,
       limit,
       offset,
       order: [[sortBy, sortOrder]],
+      include: [
+        {
+          model: StaffPayroll,
+          as: "staffPayroll",
+          required: false,
+        },
+        {
+          model: CounselorPayroll,
+          as: "counselorPayroll",
+          required: false,
+        },
+      ],
     });
 
-    const staffIds = [];
-    const counselorIds = [];
+    /* ===============================
+       COLLECT USER IDS
+    =============================== */
+
+    const staffIds = new Set();
+    const counselorIds = new Set();
 
     salaries.forEach((s) => {
-      if (s.type === "STAFF" && s.staffId) staffIds.push(s.staffId);
+      if (s.type === "STAFF" && s.staffId) staffIds.add(s.staffId);
       if (s.type === "COUNSELOR" && s.counselorId)
-        counselorIds.push(s.counselorId);
+        counselorIds.add(s.counselorId);
     });
+
+    /* ===============================
+       FETCH USERS
+    =============================== */
 
     const [staffList, counselorList] = await Promise.all([
       Staff.findAll({
-        where: { id: staffIds },
+        where: { id: [...staffIds] },
         attributes: ["id", "fullName", "phone", "email"],
         raw: true,
       }),
       SecondaryUser.findAll({
-        where: { id: counselorIds },
+        where: { id: [...counselorIds] },
         attributes: ["id", "fullname", "phone", "email"],
         raw: true,
       }),
     ]);
 
+    /* ===============================
+       CREATE USER MAPS
+    =============================== */
+
     const staffMap = {};
     staffList.forEach((s) => {
-      staffMap[s.id] = { name: s.fullName, phone: s.phone, email: s.email };
+      staffMap[s.id] = {
+        name: s.fullName,
+        phone: s.phone,
+        email: s.email,
+      };
     });
 
     const counselorMap = {};
     counselorList.forEach((c) => {
-      counselorMap[c.id] = { name: c.fullname, phone: c.phone, email: c.email };
+      counselorMap[c.id] = {
+        name: c.fullname,
+        phone: c.phone,
+        email: c.email,
+      };
     });
+
+    /* ===============================
+       FINAL RESPONSE DATA
+    =============================== */
 
     const finalData = salaries.map((salary) => {
       let user = { name: "", phone: "", email: "" };
-      if (salary.type === "STAFF") user = staffMap[salary.staffId] || user;
-      if (salary.type === "COUNSELOR")
+
+      if (salary.type === "STAFF") {
+        user = staffMap[salary.staffId] || user;
+      }
+
+      if (salary.type === "COUNSELOR") {
         user = counselorMap[salary.counselorId] || user;
+      }
+
+      // Select payroll based on type
+      let payroll = null;
+
+      if (salary.type === "STAFF" && salary.staffPayroll) {
+        payroll = {
+          id: salary.staffPayroll.id,
+          grossSalary: salary.staffPayroll.grossSalary,
+          netSalary: salary.staffPayroll.netSalary,
+          earnings: salary.staffPayroll.earnings || [],
+          deductions: salary.staffPayroll.deductions || [],
+          totalEarnings: salary.staffPayroll.totalEarnings,
+          totalDeductions: salary.staffPayroll.totalDeductions,
+        };
+      }
+
+      if (salary.type === "COUNSELOR" && salary.counselorPayroll) {
+        payroll = {
+          id: salary.counselorPayroll.id,
+          grossSalary: salary.counselorPayroll.grossSalary,
+          netSalary: salary.counselorPayroll.netSalary,
+          earnings: salary.counselorPayroll.earnings || [],
+          deductions: salary.counselorPayroll.deductions || [],
+          totalEarnings: salary.counselorPayroll.totalEarnings,
+          totalDeductions: salary.counselorPayroll.totalDeductions,
+        };
+      }
 
       return {
         salaryId: salary.id,
@@ -94,8 +169,13 @@ exports.getAllSalaries = async (req, res) => {
         counselorId: salary.counselorId,
         assignedTo: salary.assignedTo,
         paidDate: salary.paidDate,
+        payroll,
       };
     });
+
+    /* ===============================
+       RESPONSE
+    =============================== */
 
     return res.status(200).json({
       success: true,
@@ -112,6 +192,7 @@ exports.getAllSalaries = async (req, res) => {
       message: error.message,
       stack: error.stack,
     });
+
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -274,7 +355,7 @@ exports.assignStaffSalaries = async (req, res) => {
 
     await StaffSalary.update(
       { assignedTo, assignDate: new Date(), updatedBy: req.user?.id || null },
-      { where: { id: { [Op.in]: salaries.map((s) => s.id) } } }
+      { where: { id: { [Op.in]: salaries.map((s) => s.id) } } },
     );
 
     res.status(200).json({
