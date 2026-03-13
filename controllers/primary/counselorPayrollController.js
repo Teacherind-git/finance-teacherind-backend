@@ -8,11 +8,12 @@ const { Op } = require("sequelize");
 /**
  * GET counselor payroll list (default values if payroll not created)
  */
-
 exports.getCounselorPayrollList = async (req, res) => {
   logger.info("Fetching counselor payroll list");
 
   try {
+    const { search } = req.query;
+
     const { page, limit, sortBy, sortOrder } = getPaginationParams(
       req,
       [
@@ -23,14 +24,23 @@ exports.getCounselorPayrollList = async (req, res) => {
         "totalDeductions",
         "payrollMonth",
       ],
-      "fullName",
+      "fullName"
     );
 
     /* -------------------------
        FETCH COUNSELORS (SECONDARY DB)
     -------------------------- */
+
+    let counselorWhere = { role: 2, status: 1 };
+
+    if (search) {
+      counselorWhere[Op.or] = [
+        { fullname: { [Op.like]: `%${search}%` } }
+      ];
+    }
+
     const counselors = await User.findAll({
-      where: { role: 2, status: 1 },
+      where: counselorWhere,
       attributes: ["id", "fullname"],
       raw: true,
     });
@@ -40,6 +50,7 @@ exports.getCounselorPayrollList = async (req, res) => {
     /* -------------------------
        FETCH PAYROLLS (PRIMARY DB)
     -------------------------- */
+
     const payrolls = await counselorPayroll.findAll({
       where: { isDeleted: false },
       raw: true,
@@ -53,6 +64,7 @@ exports.getCounselorPayrollList = async (req, res) => {
     /* -------------------------
        MERGE RESULT
     -------------------------- */
+
     let result = counselors.map((c) => {
       const payroll = payrollMap[c.id] || {};
 
@@ -86,6 +98,7 @@ exports.getCounselorPayrollList = async (req, res) => {
     /* -------------------------
        BUSINESS SORT: netSalary = 0 FIRST
     -------------------------- */
+
     result.sort((a, b) => {
       if (a.netSalary === 0 && b.netSalary !== 0) return -1;
       if (a.netSalary !== 0 && b.netSalary === 0) return 1;
@@ -95,6 +108,7 @@ exports.getCounselorPayrollList = async (req, res) => {
     /* -------------------------
        DYNAMIC SORT (UI)
     -------------------------- */
+
     result.sort((a, b) => {
       const A = a[sortBy];
       const B = b[sortBy];
@@ -108,6 +122,7 @@ exports.getCounselorPayrollList = async (req, res) => {
     /* -------------------------
        PAGINATION
     -------------------------- */
+
     const totalRecords = result.length;
     const start = (page - 1) * limit;
     const paginatedData = result.slice(start, start + limit);

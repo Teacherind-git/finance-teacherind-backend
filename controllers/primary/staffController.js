@@ -161,7 +161,7 @@ exports.uploadDocuments = async (req, res) => {
         fileName: file.originalname,
         filePath: `/uploads/documents/${file.filename}`,
         fileType: file.mimetype,
-      }))
+      })),
     );
 
     logger.info("Staff documents uploaded", {
@@ -255,6 +255,8 @@ exports.getAllStaff = async (req, res) => {
   try {
     logger.info("Fetching all staff");
 
+    const { search } = req.query;
+
     const { page, limit, sortBy, sortOrder } = getPaginationParams(
       req,
       [
@@ -266,22 +268,45 @@ exports.getAllStaff = async (req, res) => {
         "position",
         "status",
       ],
-      "updatedAt"
+      "updatedAt",
     );
 
+    // Staff search condition
+    let staffWhere = { isDeleted: false };
+
+    if (search) {
+      staffWhere[Op.or] = [
+        { fullName: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+        { department: { [Op.like]: `%${search}%` } },
+        { position: { [Op.like]: `%${search}%` } },
+      ];
+    }
+
     const staffList = await Staff.findAll({
-      where: { isDeleted: false },
+      where: staffWhere,
       include: [{ model: StaffDocument, as: "documents" }],
     });
 
     const staffEmails = staffList.map((s) => s.email);
 
+    // User search condition
+    let userWhere = {
+      roleId: 3,
+      isDeleted: false,
+      email: { [Op.notIn]: staffEmails },
+    };
+
+    if (search) {
+      userWhere[Op.or] = [
+        { firstName: { [Op.like]: `%${search}%` } },
+        { lastName: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+      ];
+    }
+
     const newUsers = await User.findAll({
-      where: {
-        roleId: 3,
-        isDeleted: false,
-        email: { [Op.notIn]: staffEmails },
-      },
+      where: userWhere,
       include: [{ model: Role, as: "role", attributes: ["name"] }],
     });
 
@@ -308,7 +333,6 @@ exports.getAllStaff = async (req, res) => {
     }));
 
     const formattedUsers = newUsers.map((u) => {
-      // Check if this user exists in staffList (email match)
       const isInStaff = staffList.some((s) => s.email === u.email);
 
       return {
@@ -317,7 +341,7 @@ exports.getAllStaff = async (req, res) => {
         roleName: u.role?.name || "",
         documents: [],
         status: u.status ? "Active" : "Inactive",
-        staffStatus: isInStaff ? "Already in Staff" : "Can be Updated", // <-- new field
+        staffStatus: isInStaff ? "Already in Staff" : "Can be Updated",
         createdBy: u.createdBy ? creatorMap[u.createdBy] || "Unknown" : null,
       };
     });
@@ -359,14 +383,27 @@ exports.getAllTutors = async (req, res) => {
   try {
     logger.info("Fetching all tutors");
 
+    const { search } = req.query;
+
     const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
       req,
       ["id", "fullName", "email", "status"],
-      "id"
+      "id",
     );
 
+    let whereCondition = { role: 3 };
+
+    // Search setup
+    if (search) {
+      whereCondition[Op.or] = [
+        { fullName: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+        { phone: { [Op.like]: `%${search}%` } },
+      ];
+    }
+
     const { count, rows } = await SecondaryUser.findAndCountAll({
-      where: { role: 3 },
+      where: whereCondition,
       attributes: ["id", "fullName", "email", "phone", "status"],
       limit,
       offset,
@@ -398,9 +435,10 @@ exports.getAllTutors = async (req, res) => {
     });
   } catch (error) {
     logger.error("Error fetching tutor list", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch tutors" });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tutors",
+    });
   }
 };
 
@@ -409,14 +447,27 @@ exports.getAllCounselors = async (req, res) => {
   try {
     logger.info("Fetching all counselors");
 
+    const { search } = req.query;
+
     const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
       req,
       ["id", "fullName", "email", "status"],
-      "id"
+      "id",
     );
 
+    let whereCondition = { role: 2 };
+
+    // Search setup
+    if (search) {
+      whereCondition[Op.or] = [
+        { fullName: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+        { phone: { [Op.like]: `%${search}%` } },
+      ];
+    }
+
     const { count, rows } = await SecondaryUser.findAndCountAll({
-      where: { role: 2 },
+      where: whereCondition,
       attributes: ["id", "fullName", "email", "phone", "status"],
       limit,
       offset,
@@ -448,9 +499,10 @@ exports.getAllCounselors = async (req, res) => {
     });
   } catch (error) {
     logger.error("Error fetching counselor list", error);
-    return res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch counselors" });
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch counselors",
+    });
   }
 };
 
@@ -468,37 +520,33 @@ exports.getStaffSummary = async (req, res) => {
 
     const emailList = staffEmails.map((s) => s.email);
 
-    const [
-      totalStaff,
-      totalTutors,
-      totalCounselors,
-      pendingStaff,
-    ] = await Promise.all([
-      // Total staff (primary DB)
-      Staff.count({
-        where: { isDeleted: false },
-      }),
+    const [totalStaff, totalTutors, totalCounselors, pendingStaff] =
+      await Promise.all([
+        // Total staff (primary DB)
+        Staff.count({
+          where: { isDeleted: false },
+        }),
 
-      // Total tutors (secondary DB)
-      SecondaryUser.count({
-        where: { role: 3 },
-      }),
+        // Total tutors (secondary DB)
+        SecondaryUser.count({
+          where: { role: 3 },
+        }),
 
-      // Total counselors (secondary DB)
-      SecondaryUser.count({
-        where: { role: 2 },
-      }),
+        // Total counselors (secondary DB)
+        SecondaryUser.count({
+          where: { role: 2 },
+        }),
 
-      // ✅ Pending staff (Users not yet in Staff table)
-      User.count({
-        where: {
-          roleId: 3,
-          isDeleted: false,
-          email: { [Op.notIn]: emailList },
-          // status: true, // optional if you want only active users
-        },
-      }),
-    ]);
+        // ✅ Pending staff (Users not yet in Staff table)
+        User.count({
+          where: {
+            roleId: 3,
+            isDeleted: false,
+            email: { [Op.notIn]: emailList },
+            // status: true, // optional if you want only active users
+          },
+        }),
+      ]);
 
     return res.status(200).json({
       success: true,

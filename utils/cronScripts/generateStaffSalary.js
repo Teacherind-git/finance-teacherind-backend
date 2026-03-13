@@ -19,6 +19,13 @@ function getSalaryDatesFromPayrollMonth(payrollMonth) {
   };
 }
 
+function getPreviousPayrollMonth() {
+  const now = new Date();
+  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+
+  return prevMonth;
+}
+
 // ✅ ADMIN USER (roleId = 1)
 async function getAdminUser() {
   const adminUser = await PrimaryUser.findOne({
@@ -60,10 +67,12 @@ async function generateStaffSalary() {
       const { salaryDate, dueDate, finalDueDate } =
         getSalaryDatesFromPayrollMonth(payroll.payrollMonth);
 
+      const payrollMonth = getPreviousPayrollMonth();
+
       const exists = await StaffSalary.findOne({
         where: {
           staffId: payroll.staffId,
-          payrollMonth: payroll.payrollMonth,
+          payrollMonth: payrollMonth,
           type: "STAFF",
         },
       });
@@ -80,12 +89,12 @@ async function generateStaffSalary() {
         finalDueDate,
         type: "STAFF",
         status: "Pending",
-        createdBy: adminUser.id,   // ✅ dynamic
+        createdBy: adminUser.id, // ✅ dynamic
         updatedBy: adminUser.id,
       });
 
       logger.info(
-        `🟢 Staff salary created | staffId: ${payroll.staffId}, month: ${payroll.payrollMonth}`
+        `🟢 Staff salary created | staffId: ${payroll.staffId}, month: ${payroll.payrollMonth}`,
       );
     }
 
@@ -120,12 +129,12 @@ async function generateStaffSalary() {
         finalDueDate,
         type: "COUNSELOR",
         status: "Pending",
-        createdBy: adminUser.id,   // ✅ dynamic
+        createdBy: adminUser.id, // ✅ dynamic
         updatedBy: adminUser.id,
       });
 
       logger.info(
-        `🟢 Counselor salary created | counselorId: ${payroll.counselorId}, month: ${payroll.payrollMonth}`
+        `🟢 Counselor salary created | counselorId: ${payroll.counselorId}, month: ${payroll.payrollMonth}`,
       );
     }
 

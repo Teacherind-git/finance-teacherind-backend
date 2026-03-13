@@ -9,6 +9,7 @@ const PayrollAudit = require("../../models/primary/PayrollAudit");
 const TutorSalary = require("../../models/primary/TutorSalary");
 const logger = require("../../utils/logger"); // your logger instance
 const { getPaginationParams } = require("../../utils/pagination");
+const { Op } = require("sequelize");
 
 /* =====================================================
    RESPONSE HELPERS
@@ -193,13 +194,15 @@ exports.saveTutorPayroll = async (req, res) => {
    GET ALL PAYROLLS
 ===================================================== */
 exports.getTutorPayrolls = async (req, res) => {
-  const requestId = req.id || Date.now(); // helpful for tracing
+  const requestId = req.id || Date.now();
 
   try {
     logger.info("📥 getTutorPayrolls request started", {
       requestId,
       query: req.query,
     });
+
+    const { search } = req.query;
 
     const { page, limit, offset, sortOrder } = getPaginationParams(
       req,
@@ -216,10 +219,28 @@ exports.getTutorPayrolls = async (req, res) => {
     });
 
     /* ----------------------------------------------------
+     * Build tutor filter (SEARCH SUPPORT)
+     * -------------------------------------------------- */
+    const tutorWhere = {
+      role: 3,
+      status: 1,
+    };
+
+    if (search) {
+      tutorWhere[Op.or] = [
+        {
+          fullname: {
+            [Op.like]: `%${search}%`,
+          },
+        },
+      ];
+    }
+
+    /* ----------------------------------------------------
      * 1️⃣ Fetch tutors (SECONDARY DB)
      * -------------------------------------------------- */
     const tutors = await User.findAll({
-      where: { role: 3, status: 1 },
+      where: tutorWhere,
       attributes: ["id", "fullname"],
       limit,
       offset,
@@ -350,7 +371,7 @@ exports.getTutorPayrolls = async (req, res) => {
      * 5️⃣ Pagination count
      * -------------------------------------------------- */
     const totalRecords = await User.count({
-      where: { role: 3, status: 1 },
+      where: tutorWhere,
     });
 
     logger.info("📤 getTutorPayrolls completed successfully", {
@@ -373,6 +394,8 @@ exports.getTutorPayrolls = async (req, res) => {
     logger.error("❌ Failed to fetch tutor payroll list", {
       requestId,
       message: err.message,
+      sqlMessage: err?.parent?.sqlMessage,
+      sql: err?.parent?.sql,
       stack: err.stack,
     });
 
@@ -382,7 +405,6 @@ exports.getTutorPayrolls = async (req, res) => {
     });
   }
 };
-
 /* =====================================================
    GET SINGLE PAYROLL
 ===================================================== */
@@ -545,7 +567,7 @@ exports.updateTutorPayroll = async (req, res) => {
         remark,
         updatedBy: req.user?.id || null,
       },
-      { transaction }
+      { transaction },
     );
 
     /* =============================
@@ -567,7 +589,7 @@ exports.updateTutorPayroll = async (req, res) => {
           payrollMonth,
           updatedBy: req.user?.id || null,
         },
-        { transaction }
+        { transaction },
       );
     }
 

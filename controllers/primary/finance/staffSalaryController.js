@@ -15,8 +15,12 @@ const logger = require("../../../utils/logger"); // ✅ central logger
 exports.getAllSalaries = async (req, res) => {
   try {
     const whereCondition = { isDeleted: false };
+    const { search } = req.query;
 
-    // Department based filtering
+    /* ===============================
+       DEPARTMENT FILTER
+    =============================== */
+
     if (req.user?.department === "HR") {
       whereCondition.status = "Pending";
     }
@@ -24,6 +28,58 @@ exports.getAllSalaries = async (req, res) => {
     if (req.user?.department === "Finance") {
       whereCondition.status = { [Op.ne]: "Pending" };
     }
+
+    /* ===============================
+       SEARCH USERS FIRST
+    =============================== */
+
+    let staffSearchIds = [];
+    let counselorSearchIds = [];
+
+    if (search) {
+      const searchCondition = {
+        [Op.or]: [
+          { fullName: { [Op.like]: `%${search}%` } },
+          { phone: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } },
+        ],
+      };
+
+      const counselorSearchCondition = {
+        [Op.or]: [
+          { fullname: { [Op.like]: `%${search}%` } },
+          { phone: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } },
+        ],
+      };
+
+      const [staffMatches, counselorMatches] = await Promise.all([
+        Staff.findAll({
+          where: searchCondition,
+          attributes: ["id"],
+          raw: true,
+        }),
+        SecondaryUser.findAll({
+          where: counselorSearchCondition,
+          attributes: ["id"],
+          raw: true,
+        }),
+      ]);
+
+      staffSearchIds = staffMatches.map((s) => s.id);
+      counselorSearchIds = counselorMatches.map((c) => c.id);
+
+      whereCondition[Op.or] = [
+        { payrollMonth: { [Op.like]: `%${search}%` } },
+        { status: { [Op.like]: `%${search}%` } },
+        { staffId: { [Op.in]: staffSearchIds } },
+        { counselorId: { [Op.in]: counselorSearchIds } },
+      ];
+    }
+
+    /* ===============================
+       PAGINATION
+    =============================== */
 
     const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
       req,
@@ -128,7 +184,6 @@ exports.getAllSalaries = async (req, res) => {
         user = counselorMap[salary.counselorId] || user;
       }
 
-      // Select payroll based on type
       let payroll = null;
 
       if (salary.type === "STAFF" && salary.staffPayroll) {

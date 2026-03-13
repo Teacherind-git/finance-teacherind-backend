@@ -1,5 +1,5 @@
 const { sequelizePrimary } = require("../../config/db");
-const Expense = require("../../models/primary/BasePaySyllabus"); // renamed for clarity
+const Expense = require("../../models/primary/Package"); // renamed for clarity
 const TutorPayroll = require("../../models/primary/TutorPayroll");
 const logger = require("../../utils/logger"); // optional centralized logger
 
@@ -19,7 +19,7 @@ const logger = require("../../utils/logger"); // optional centralized logger
     //   await TutorPayroll.destroy({ where: {}, force: true, transaction });
     // });
 
-    logger.info("✅ All TutorPayroll and TutorPayrollItem rows deleted successfully.");
+    //logger.info("✅ All TutorPayroll and TutorPayrollItem rows deleted successfully.");
     process.exit(0);
   } catch (error) {
     logger.error("❌ Error deleting TutorPayroll/Items:", {

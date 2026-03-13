@@ -56,6 +56,7 @@ exports.createPayroll = async (req, res) => {
 exports.getAllPayrolls = async (req, res) => {
   try {
     const { page, limit } = getPaginationParams(req);
+    const { search } = req.query;
 
     const payrolls = await StaffPayroll.findAndCountAll({
       where: { isDeleted: false },
@@ -63,6 +64,15 @@ exports.getAllPayrolls = async (req, res) => {
         {
           model: Staff,
           attributes: ["id", "fullName", "employeeId", "department"],
+          where: search
+            ? {
+                [Op.or]: [
+                  { fullName: { [Op.like]: `%${search}%` } },
+                  { employeeId: { [Op.like]: `%${search}%` } },
+                  { department: { [Op.like]: `%${search}%` } },
+                ],
+              }
+            : undefined,
         },
       ],
       order: [["createdAt", "DESC"]],
@@ -70,7 +80,6 @@ exports.getAllPayrolls = async (req, res) => {
       offset: (page - 1) * limit,
     });
 
-    // ✅ Normalize JSON fields
     const rows = payrolls.rows.map((item) => {
       const data = item.toJSON();
 

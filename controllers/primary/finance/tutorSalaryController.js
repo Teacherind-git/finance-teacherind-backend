@@ -13,13 +13,53 @@ const logger = require("../../../utils/logger"); // ✅ central logger
 exports.getAllTutorSalaries = async (req, res) => {
   try {
     const whereCondition = { isDeleted: false };
+    const { search } = req.query;
+
+    /* ===============================
+       DEPARTMENT FILTER
+    =============================== */
 
     if (req.user?.department === "HR") {
       whereCondition.status = "Pending";
     }
+
     if (req.user?.department === "Finance") {
       whereCondition.status = { [Op.ne]: "Pending" };
     }
+
+    /* ===============================
+       SEARCH TUTORS
+    =============================== */
+
+    let tutorSearchIds = [];
+
+    if (search) {
+      const tutorSearchCondition = {
+        [Op.or]: [
+          { fullname: { [Op.like]: `%${search}%` } },
+          { phone: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } },
+        ],
+      };
+
+      const tutors = await SecondaryUser.findAll({
+        where: tutorSearchCondition,
+        attributes: ["id"],
+        raw: true,
+      });
+
+      tutorSearchIds = tutors.map((t) => t.id);
+
+      whereCondition[Op.or] = [
+        { payrollMonth: { [Op.like]: `%${search}%` } },
+        { status: { [Op.like]: `%${search}%` } },
+        { tutorId: { [Op.in]: tutorSearchIds } },
+      ];
+    }
+
+    /* ===============================
+       PAGINATION
+    =============================== */
 
     const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
       req,
@@ -34,6 +74,10 @@ exports.getAllTutorSalaries = async (req, res) => {
       ],
     );
 
+    /* ===============================
+       FETCH SALARIES
+    =============================== */
+
     const { rows: salaries, count } = await TutorSalary.findAndCountAll({
       where: whereCondition,
       limit,
@@ -42,7 +86,15 @@ exports.getAllTutorSalaries = async (req, res) => {
       include: [{ model: TutorPayroll, as: "payroll" }],
     });
 
+    /* ===============================
+       COLLECT TUTOR IDS
+    =============================== */
+
     const tutorIds = salaries.map((s) => s.tutorId).filter(Boolean);
+
+    /* ===============================
+       FETCH TUTORS
+    =============================== */
 
     const tutors = await SecondaryUser.findAll({
       where: { id: tutorIds },
@@ -50,10 +102,22 @@ exports.getAllTutorSalaries = async (req, res) => {
       raw: true,
     });
 
+    /* ===============================
+       CREATE MAP
+    =============================== */
+
     const tutorMap = {};
     tutors.forEach((t) => {
-      tutorMap[t.id] = { name: t.fullname, phone: t.phone, email: t.email };
+      tutorMap[t.id] = {
+        name: t.fullname,
+        phone: t.phone,
+        email: t.email,
+      };
     });
+
+    /* ===============================
+       FINAL RESPONSE DATA
+    =============================== */
 
     const finalData = salaries.map((salary) => ({
       salaryId: salary.id,
@@ -85,6 +149,10 @@ exports.getAllTutorSalaries = async (req, res) => {
         : null,
     }));
 
+    /* ===============================
+       RESPONSE
+    =============================== */
+
     return res.status(200).json({
       success: true,
       pagination: {
@@ -100,6 +168,7 @@ exports.getAllTutorSalaries = async (req, res) => {
       message: error.message,
       stack: error.stack,
     });
+
     return res.status(500).json({
       success: false,
       message: "Internal server error",
@@ -107,7 +176,6 @@ exports.getAllTutorSalaries = async (req, res) => {
     });
   }
 };
-
 /* -----------------------------------------------------
    2. UPDATE SALARY STATUS (Finance)
 ----------------------------------------------------- */
