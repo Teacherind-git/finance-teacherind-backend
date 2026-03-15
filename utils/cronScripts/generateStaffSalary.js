@@ -12,18 +12,15 @@ const logger = require("../../utils/logger"); // ✅ central logger
 ========================== */
 function getSalaryDatesFromPayrollMonth(payrollMonth) {
   const d = new Date(payrollMonth);
+
+  // move to next month
+  const nextMonth = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+
   return {
-    salaryDate: new Date(d.getFullYear(), d.getMonth(), 8),
-    dueDate: new Date(d.getFullYear(), d.getMonth(), 9),
-    finalDueDate: new Date(d.getFullYear(), d.getMonth(), 10),
+    salaryDate: new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 8),
+    dueDate: new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 9),
+    finalDueDate: new Date(nextMonth.getFullYear(), nextMonth.getMonth(), 10),
   };
-}
-
-function getPreviousPayrollMonth() {
-  const now = new Date();
-  const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-
-  return prevMonth;
 }
 
 // ✅ ADMIN USER (roleId = 1)
@@ -67,12 +64,10 @@ async function generateStaffSalary() {
       const { salaryDate, dueDate, finalDueDate } =
         getSalaryDatesFromPayrollMonth(payroll.payrollMonth);
 
-      const payrollMonth = getPreviousPayrollMonth();
-
       const exists = await StaffSalary.findOne({
         where: {
           staffId: payroll.staffId,
-          payrollMonth: payrollMonth,
+          payrollMonth: payroll.payrollMonth,
           type: "STAFF",
         },
       });

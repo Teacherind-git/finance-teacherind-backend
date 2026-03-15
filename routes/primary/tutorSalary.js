@@ -11,6 +11,11 @@ router.get(
   authorizeRoles("SuperAdmin", "Admin", "User"),
   salaryController.getAllTutorSalaries
 );
+router.get(
+  "/salary/summary",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  salaryController.getTutorSalarySummary
+);
 router.get("/salary/non-assigned", salaryController.getNonAssignedTutorSalaries);
 router.get("/salary/receipt/:id", salaryController.downloadReceipt);
 //Update

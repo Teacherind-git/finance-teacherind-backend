@@ -52,6 +52,12 @@ router.put(
   authorizeRoles("SuperAdmin", "User"),
   studentController.updateStudent
 );
+
+router.put(
+  "/bill/:id/mark-paid",
+  studentBillController.markStudentBillPaid
+);
+
 router.delete(
   "/:id",
   authorizeRoles("SuperAdmin", "User"),

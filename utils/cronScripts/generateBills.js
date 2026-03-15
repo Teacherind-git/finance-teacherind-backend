@@ -9,6 +9,7 @@ const { Op } = require("sequelize");
 const Student = require("../../models/primary/Student");
 const StudentDetail = require("../../models/primary/StudentDetail");
 const StudentBill = require("../../models/primary/StudentBill");
+const PrimaryUser = require("../../models/primary/User");
 
 const logger = require("../logger");
 
@@ -24,6 +25,23 @@ const logBoth = {
     logger.error(msg, meta);
   },
 };
+
+// ✅ ADMIN USER (roleId = 1)
+async function getAdminUser() {
+  const adminUser = await PrimaryUser.findOne({
+    where: {
+      roleId: 1,
+      isDeleted: false,
+    },
+    attributes: ["id"],
+  });
+
+  if (!adminUser) {
+    throw new Error("❌ Admin user (roleId = 1) not found");
+  }
+
+  return adminUser;
+}
 
 async function generateInvoiceId(transaction = null) {
   const year = moment().format("YYYY");
@@ -63,18 +81,27 @@ async function generateBills() {
     date: startOfToday.format("YYYY-MM-DD"),
   });
 
+  /* --------------------------
+       ADMIN USER
+    --------------------------- */
+  const adminUser = await getAdminUser();
+  logger.info(`🛠️ Cron executed by Admin ID: ${adminUser.id}`);
+
   try {
     const students = await Student.findAll({
-      where: {
-        createdAt: {
-          [Op.between]: [startOfToday.toDate(), endOfToday.toDate()],
-        },
-      },
       include: [
         {
           model: StudentDetail,
           as: "details",
           required: true,
+        },
+        {
+          model: StudentBill,
+          as: "bills",
+          required: false, // allow students with no bills
+          where: {
+            status: { [Op.ne]: "Generated" }, // optional: only consider bills not generated
+          },
         },
       ],
     });
@@ -84,6 +111,13 @@ async function generateBills() {
     });
 
     for (const student of students) {
+      if (student.bills && student.bills.length > 0) {
+        logBoth.warn("Billing skipped – student already has a bill", {
+          studentId: student.id,
+        });
+        continue;
+      }
+
       const existingBill = await StudentBill.findOne({
         where: {
           studentId: student.id,
@@ -141,8 +175,8 @@ async function generateBills() {
               .add(parseInt(process.env.FINAL_DUE_MINUTES || "60"), "minutes")
               .toDate(),
         status: "Generated",
-        createdBy: 10,
-        updatedBy: 10,
+        createdBy: adminUser.id,
+        updatedBy: adminUser.id,
       });
 
       logBoth.info("Bill generated successfully", {

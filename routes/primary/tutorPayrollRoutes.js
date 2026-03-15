@@ -21,6 +21,11 @@ router.get(
   controller.getTutorPayrolls,
 ); // GET ALL
 router.get(
+  "/summary",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  controller.getTutorPayrollSummary,
+); // GET Summary
+router.get(
   "/:id",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   controller.getTutorPayroll,

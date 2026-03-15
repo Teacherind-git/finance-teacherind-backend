@@ -29,7 +29,7 @@ exports.getStudentBills = async (req, res) => {
     const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
       req,
       allowedSortFields,
-      "createdAt"
+      "createdAt",
     );
 
     logger.info("Get student bills API called", {
@@ -223,7 +223,6 @@ exports.downloadReceipt = async (req, res) => {
        BUILD RECEIPT DATA (ORIGINAL)
     --------------------------------- */
     const data = {
-    
       paymentNumber: bill.invoiceId,
       paymentDate: formatDate(bill.billDate),
       paymentMode: "Bank", // or bill.paymentMode if exists
@@ -285,10 +284,16 @@ exports.getStudentBillsSummary = async (req, res) => {
       requestedBy: req.user?.id || "anonymous",
     });
 
+    // 🔹 Base filters for pending bills
     const baseWhere = {
       status: {
-        [Op.in]: ["Pending", "On Due", "Overdue"],
+        [Op.in]: ["Generated", "Due", "Overdue"],
       },
+    };
+
+    // 🔹 Base filter for paid bills
+    const paidWhere = {
+      status: "Paid",
     };
 
     // 📅 Date ranges
@@ -301,16 +306,22 @@ exports.getStudentBillsSummary = async (req, res) => {
     const [
       totalCount,
       totalAmount,
+      paidCount,
+      paidAmount,
       todayCount,
       todayAmount,
       weekCount,
       weekAmount,
     ] = await Promise.all([
-      // 🔢 TOTAL
+      // 🔢 TOTAL pending
       StudentBill.count({ where: baseWhere }),
       StudentBill.sum("amount", { where: baseWhere }),
 
-      // 🔢 TODAY
+      // 🔢 TOTAL paid
+      StudentBill.count({ where: paidWhere }),
+      StudentBill.sum("amount", { where: paidWhere }),
+
+      // 🔢 TODAY pending
       StudentBill.count({
         where: {
           ...baseWhere,
@@ -324,7 +335,7 @@ exports.getStudentBillsSummary = async (req, res) => {
         },
       }),
 
-      // 🔢 WEEK
+      // 🔢 WEEK pending
       StudentBill.count({
         where: {
           ...baseWhere,
@@ -343,8 +354,14 @@ exports.getStudentBillsSummary = async (req, res) => {
       success: true,
       data: {
         total: {
-          count: totalCount,
-          amount: totalAmount || 0,
+          pending: {
+            count: totalCount,
+            amount: totalAmount || 0,
+          },
+          paid: {
+            count: paidCount,
+            amount: paidAmount || 0,
+          },
         },
         today: {
           count: todayCount,
@@ -403,7 +420,7 @@ const getInvoiceData = async (studentId) => {
    * 1️⃣ Find ALL active packages for bill date
    */
   const activeDetails = student.details.filter(
-    (d) => d.package && isSameMonth(d.startDate, bill.billDate)
+    (d) => d.package && isSameMonth(d.startDate, bill.billDate),
   );
 
   /**
@@ -464,4 +481,60 @@ const formatDate = (date) => {
     month: "short",
     year: "numeric",
   });
+};
+
+exports.markStudentBillPaid = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { paymentMode } = req.body;
+
+    const bill = await StudentBill.findByPk(id);
+
+    if (!bill) {
+      return res.status(404).json({
+        success: false,
+        message: "Bill not found",
+      });
+    }
+
+    // Generate payment number
+    const lastPayment = await StudentBill.findOne({
+      where: { paymentNumber: { [Op.ne]: null } },
+      order: [["id", "DESC"]],
+    });
+
+    let nextNumber = 1;
+
+    if (lastPayment?.paymentNumber) {
+      const lastNum = parseInt(lastPayment.paymentNumber.split("-")[1]);
+      nextNumber = lastNum + 1;
+    }
+
+    const paymentNumber = `PAY-${String(nextNumber).padStart(5, "0")}`;
+
+    const paidAt = new Date(); // ✅ Backend current date
+
+    await bill.update({
+      status: "Paid",
+      paymentMode,
+      paymentNumber,
+      paymentDate: paidAt,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Bill marked as paid successfully",
+      data: {
+        paymentNumber,
+        paidAt,
+      },
+    });
+  } catch (error) {
+    logger.error("Mark Student Bill Paid Error", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to update bill status",
+    });
+  }
 };

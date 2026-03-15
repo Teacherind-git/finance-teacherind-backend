@@ -612,3 +612,66 @@ exports.updateTutorPayroll = async (req, res) => {
     });
   }
 };
+/* =========================
+   TUTOR PAYROLL SUMMARY
+   (PREVIOUS MONTH)
+========================= */
+exports.getTutorPayrollSummary = async (req, res) => {
+  try {
+
+    const now = new Date();
+
+    // Previous month start
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    // Previous month end
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    endOfMonth.setHours(23, 59, 59, 999);
+
+    /* -------------------------
+       TOTAL ACTIVE TUTORS
+    -------------------------- */
+    const totalTutors = await User.count({
+      where: {
+        role: 3,     // tutor role
+        status: 1,   // active
+      },
+    });
+
+    /* -------------------------
+       COMPLETED PAYROLLS
+    -------------------------- */
+    const completedPayrolls = await TutorPayroll.count({
+      where: {
+        isDeleted: false,
+        payrollMonth: {
+          [Op.between]: [startOfMonth, endOfMonth],
+        },
+      },
+    });
+
+    /* -------------------------
+       PENDING PAYROLLS
+    -------------------------- */
+    const pendingPayrolls = totalTutors - completedPayrolls;
+
+    res.json({
+      success: true,
+      message: "Tutor payroll summary",
+      data: {
+        total: totalTutors,
+        completed: completedPayrolls,
+        pending: pendingPayrolls < 0 ? 0 : pendingPayrolls,
+      },
+    });
+
+  } catch (err) {
+    logger.error("Tutor payroll summary failed", err);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch tutor payroll summary",
+    });
+  }
+};

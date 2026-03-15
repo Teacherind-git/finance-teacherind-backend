@@ -20,13 +20,53 @@ const SecondaryClass = require("../../models/secondary/Class");
 /* ==========================
    HELPERS
 ========================== */
+
+function normalizeClasses(classes) {
+  if (!classes) return [];
+
+  if (Array.isArray(classes)) return classes.map(Number);
+
+  if (typeof classes === "string" && classes.startsWith("[")) {
+    try {
+      return JSON.parse(classes).map(Number);
+    } catch {
+      return [];
+    }
+  }
+
+  return classes
+    .toString()
+    .split(",")
+    .map((c) => Number(c.trim()))
+    .filter((n) => !isNaN(n));
+}
+
 function getSalaryDatesFromPayrollMonth(payrollMonth) {
   const d = new Date(payrollMonth);
+
+  // move to next month
+  const salaryMonth = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+
   return {
-    salaryDate: new Date(d.getFullYear(), d.getMonth(), 8),
-    dueDate: new Date(d.getFullYear(), d.getMonth(), 9),
-    finalDueDate: new Date(d.getFullYear(), d.getMonth(), 10),
+    salaryDate: new Date(salaryMonth.getFullYear(), salaryMonth.getMonth(), 8),
+    dueDate: new Date(salaryMonth.getFullYear(), salaryMonth.getMonth(), 9),
+    finalDueDate: new Date(
+      salaryMonth.getFullYear(),
+      salaryMonth.getMonth(),
+      10,
+    ),
   };
+}
+
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatMonth(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
 async function getFinanceManager() {
@@ -54,66 +94,47 @@ async function getAdminUser() {
   return user;
 }
 
-function normalizeClasses(classes) {
-  if (!classes) return [];
-
-  // If already array
-  if (Array.isArray(classes)) return classes.map(Number);
-
-  // If JSON string
-  if (typeof classes === "string" && classes.startsWith("[")) {
-    try {
-      return JSON.parse(classes).map(Number);
-    } catch {
-      return [];
-    }
-  }
-
-  // Comma separated string OR single value
-  return classes
-    .toString()
-    .split(",")
-    .map((c) => Number(c.trim()))
-    .filter((n) => !isNaN(n));
-}
-
 /* ==========================
    MAIN CRON
 ========================== */
+
 async function generateTutorSalary() {
   logger.info("🔄 Tutor Salary cron started");
 
   try {
     const now = new Date();
 
-    // Always generate salary for previous month
+    // previous month
     const targetMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 
     const payrollMonth = targetMonth;
 
-    const startDate = new Date(
-      targetMonth.getFullYear(),
-      targetMonth.getMonth(),
-      1,
-    );
+    const year = targetMonth.getFullYear();
+    const month = targetMonth.getMonth();
 
-    const endDate = new Date(
-      targetMonth.getFullYear(),
-      targetMonth.getMonth() + 1,
-      0,
-    );
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0);
 
-    logger.info(`Payroll month: ${payrollMonth}`);
+    logger.info(`Payroll month: ${formatMonth(payrollMonth)}`);
+
     /* --------------------------
        SYSTEM USERS
     --------------------------- */
+
     const financeManager = await getFinanceManager();
     const adminUser = await getAdminUser();
-    logger.info(`🛠️ Cron executed by Admin ID: ${adminUser.id}`);
+
+    const financeManagerId =
+      Number(financeManager?.dataValues?.id) || Number(adminUser.dataValues.id);
+
+    const adminUserId = Number(adminUser.dataValues.id);
+
+    logger.info(`🛠️ Cron executed by Admin ID: ${adminUserId}`);
 
     /* --------------------------
        FETCH TUTORS
     --------------------------- */
+
     const tutors = await SecondaryUser.findAll({
       where: { role: 3 },
       attributes: ["id", "classes"],
@@ -123,170 +144,171 @@ async function generateTutorSalary() {
 
     for (const tutor of tutors) {
       const tutorId = tutor.id;
-      if (tutorId == 291) {
-        logger.info(`➡️ Processing Tutor ${tutorId}-${tutor}`);
 
-        const tutorClasses = normalizeClasses(tutor.classes);
+      const tutorClasses = normalizeClasses(tutor.classes);
 
-        if (!Array.isArray(tutorClasses) || tutorClasses.length === 0) {
-          logger.warn(`⚠️ Tutor ${tutorId} has invalid classes`, {
-            raw: tutor.classes,
-          });
-          continue;
-        }
+      if (!Array.isArray(tutorClasses) || tutorClasses.length === 0) {
+        logger.warn(`⚠️ Tutor ${tutorId} has invalid classes`, {
+          raw: tutor.classes,
+        });
+        continue;
+      }
 
-        /* --------------------------
+      logger.info(`➡️ Processing Tutor ${tutorId}`);
+
+      /* --------------------------
          FETCH SCHEDULES
       --------------------------- */
-        const schedules = await ClassSchedule.findAll({
-          where: {
-            tutor: tutorId,
-            [Op.or]: [
-              { start: { [Op.between]: [startDate, endDate] } },
-              { end: { [Op.between]: [startDate, endDate] } },
-            ],
+
+      const schedules = await ClassSchedule.findAll({
+        where: {
+          tutor: tutorId,
+          start: {
+            [Op.between]: [formatDate(startDate), formatDate(endDate)],
           },
-          attributes: ["id", "class_id", "duration", "status"],
-        });
+        },
+        attributes: ["id", "class_id", "duration", "status"],
+      });
 
-        if (!schedules.length) {
-          logger.warn(`⚠️ No schedules found for Tutor ${tutorId}`);
-          continue; // Skip if no schedules
-        }
+      if (!schedules.length) {
+        logger.warn(`⚠️ No schedules found for Tutor ${tutorId}`);
+        continue;
+      }
 
-        let totalBasePay = 0;
-        let totalClasses = 0;
-        let attendedClasses = 0;
-        let missedClasses = 0;
+      let totalBasePay = 0;
+      let totalClasses = schedules.length;
+      let attendedClasses = 0;
+      let missedClasses = 0;
+      let rescheduledClasses = 0;
 
-        /* --------------------------
+      /* --------------------------
          SALARY CALCULATION
       --------------------------- */
-        for (const sc of schedules) {
-          if (!sc.duration || sc.duration <= 0) continue;
 
-          const classUnits = sc.duration / 60;
-          totalClasses += classUnits;
+      for (const sc of schedules) {
+        if (!sc.duration || sc.duration <= 0) continue;
 
-          if (sc.status === 2) attendedClasses += classUnits;
-          if (sc.status === 0) missedClasses += classUnits;
+        const classUnits = sc.duration / 60;
 
-          const secClass = await SecondaryClass.findOne({
-            where: { id: sc.class_id },
-            attributes: ["classnumber"],
-          });
-          if (!secClass) continue;
+        if (sc.status === 2) attendedClasses += classUnits;
+        if (sc.status === 0) missedClasses += classUnits;
+        if (sc.status === 3) rescheduledClasses += classUnits;
 
-          const primaryClass = await PrimaryClass.findOne({
-            where: { number: secClass.classnumber },
-            attributes: ["id"],
-          });
-          if (!primaryClass) continue;
+        const secClass = await SecondaryClass.findOne({
+          where: { id: sc.class_id },
+          attributes: ["classnumber"],
+        });
 
-          const payrollItem = await TutorPayrollItem.findOne({
-            where: { tutorId, classId: primaryClass.id, isDeleted: false },
-            attributes: ["basePay"],
-          });
-          if (!payrollItem) continue;
-          console.log(classUnits, payrollItem.basePay);
-          
+        if (!secClass) continue;
 
-          totalBasePay += payrollItem.basePay * classUnits;
-        }
+        const primaryClass = await PrimaryClass.findOne({
+          where: { number: secClass.classnumber },
+          attributes: ["id"],
+        });
 
-        // Skip if no payable amount
-        if (totalBasePay <= 0) {
-          logger.warn(
-            `⚠️ No payable classes or base pay found for Tutor ${tutorId}`,
-          );
-          continue;
-        }
+        if (!primaryClass) continue;
 
-        /* --------------------------
+        const payrollItem = await TutorPayrollItem.findOne({
+          where: { tutorId, classId: primaryClass.id, isDeleted: false },
+          attributes: ["basePay"],
+        });
+
+        if (!payrollItem) continue;
+
+        totalBasePay += payrollItem.basePay * classUnits;
+      }
+
+      if (totalBasePay <= 0) {
+        logger.warn(`⚠️ No payable amount for Tutor ${tutorId}`);
+        continue;
+      }
+
+      /* --------------------------
          PAY RULE CALCULATION
       --------------------------- */
-        const incrementAmount = 0;
-        const deductionAmount = 0;
-        const earnings = [];
-        const deductions = [];
 
-        const grossSalary = totalBasePay + incrementAmount;
-        const netSalary = grossSalary - deductionAmount;
+      const incrementAmount = 0;
+      const deductionAmount = 0;
 
-        const { salaryDate, dueDate, finalDueDate } =
-          getSalaryDatesFromPayrollMonth(payrollMonth);
+      const grossSalary = totalBasePay + incrementAmount;
+      const netSalary = grossSalary - deductionAmount;
 
-        const financeManagerId =
-          Number(financeManager?.dataValues?.id) ||
-          Number(adminUser.dataValues.id);
-        const adminUserId = Number(adminUser.dataValues.id);
+      const { salaryDate, dueDate, finalDueDate } =
+        getSalaryDatesFromPayrollMonth(payrollMonth);
 
-        /* --------------------------
-         CREATE / UPDATE PAYROLL & SALARY
+      /* --------------------------
+         CREATE / UPDATE PAYROLL
       --------------------------- */
-        const transaction = await sequelizePrimary.transaction();
 
-        try {
-          let payroll = await TutorPayroll.findOne({
-            where: {
-              tutorId,
-              payrollMonth: {
-                [Op.between]: [startDate, endDate],
-              },
-              isDeleted: false,
+      const transaction = await sequelizePrimary.transaction();
+
+      try {
+        let payroll = await TutorPayroll.findOne({
+          where: {
+            tutorId,
+            payrollMonth: {
+              [Op.between]: [startDate, endDate],
             },
-            transaction,
-          });
-          if (payroll) {
-            logger.info(`🔄 Updating existing payroll for Tutor ${tutorId}`);
-            await payroll.update(
-              {
-                totalClasses,
-                attendedClasses,
-                missedClasses,
-                baseSalary: totalBasePay,
-                grossSalary,
-                netSalary,
-                earnings: JSON.stringify(earnings),
-                totalEarnings: incrementAmount,
-                deductions: JSON.stringify(deductions),
-                totalDeductions: deductionAmount,
-                updatedBy: adminUserId,
-              },
-              { transaction },
-            );
+            isDeleted: false,
+          },
+          transaction,
+        });
 
-            // Always create TutorSalary
-            await TutorSalary.create(
-              {
-                payrollId: payroll.id,
-                payrollMonth,
-                tutorId,
-                type: "TUTOR",
-                amount: netSalary,
-                salaryDate,
-                dueDate,
-                finalDueDate,
-                status: "Pending",
-                assignedTo: financeManagerId,
-                createdBy: adminUserId,
-                updatedBy: adminUserId,
-              },
-              { transaction },
-            );
-          }
+        if (payroll) {
+          logger.info(`🔄 Updating existing payroll for Tutor ${tutorId}`);
 
-          await transaction.commit();
-          logger.info(
-            `🎉 Payroll & TutorSalary processed | Tutor:${tutorId} | Net:${netSalary}`,
-          );
-        } catch (err) {
-          await transaction.rollback();
-          logger.error(
-            `❌ Failed payroll/salary operation for Tutor ${tutorId}`,
-            { message: err.message },
+          await payroll.update(
+            {
+              totalClasses,
+              attendedClasses,
+              missedClasses,
+              baseSalary: totalBasePay,
+              grossSalary,
+              netSalary,
+              totalEarnings: incrementAmount,
+              totalDeductions: deductionAmount,
+              updatedBy: adminUserId,
+            },
+            { transaction },
           );
         }
+
+        /* --------------------------
+           CREATE SALARY
+        --------------------------- */
+
+        await TutorSalary.create(
+          {
+            payrollId: payroll?.id,
+            payrollMonth,
+            tutorId,
+            type: "TUTOR",
+            amount: netSalary,
+            salaryDate,
+            dueDate,
+            finalDueDate,
+            status: "Pending",
+            assignedTo: financeManagerId,
+            createdBy: adminUserId,
+            updatedBy: adminUserId,
+          },
+          { transaction },
+        );
+
+        await transaction.commit();
+
+        logger.info(
+          `🎉 Payroll processed | Tutor:${tutorId} | Net Salary:${netSalary}`,
+        );
+      } catch (err) {
+        await transaction.rollback();
+
+        logger.error(
+          `❌ Failed payroll/salary operation for Tutor ${tutorId}`,
+          {
+            message: err.message,
+          },
+        );
       }
     }
 

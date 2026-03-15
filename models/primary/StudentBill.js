@@ -44,16 +44,11 @@ const StudentBill = sequelizePrimary.define(
   {
     tableName: "student_bills", // 👈 Force exact table name
     timestamps: true,
-  }
+  },
 );
 
 // Relations
-Student.hasMany(StudentBill, {
-  foreignKey: "studentId",
-});
-
-StudentBill.belongsTo(Student, {
-  foreignKey: "studentId",
-});
+Student.hasMany(StudentBill, { as: "bills", foreignKey: "studentId" });
+StudentBill.belongsTo(Student, { foreignKey: "studentId" });
 
 module.exports = StudentBill;

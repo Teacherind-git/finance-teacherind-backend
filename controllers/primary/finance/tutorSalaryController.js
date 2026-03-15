@@ -428,3 +428,95 @@ exports.getNonAssignedTutorSalaries = async (req, res) => {
     });
   }
 };
+/* -----------------------------------------------------
+   6. GET TUTOR SALARY SUMMARY
+----------------------------------------------------- */
+exports.getTutorSalarySummary = async (req, res) => {
+  try {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    const whereCondition = { isDeleted: false };
+
+    /* ===============================
+       DEPARTMENT FILTER
+    =============================== */
+
+    if (req.user?.department === "HR") {
+      whereCondition.status = "Pending";
+    }
+
+    if (req.user?.department === "Finance") {
+      whereCondition.status = { [Op.ne]: "Pending" };
+    }
+
+    /* ===============================
+       TODAY DUE
+    =============================== */
+
+    const todayDue = await TutorSalary.sum("amount", {
+      where: {
+        ...whereCondition,
+        dueDate: today,
+        status: { [Op.ne]: "Paid" },
+      },
+    });
+
+    /* ===============================
+       MONTH DUE
+    =============================== */
+
+    const monthDue = await TutorSalary.sum("amount", {
+      where: {
+        ...whereCondition,
+        dueDate: {
+          [Op.between]: [startOfMonth, endOfMonth],
+        },
+        status: { [Op.ne]: "Paid" },
+      },
+    });
+
+    /* ===============================
+       TOTAL PENDING
+    =============================== */
+
+    const totalPending = await TutorSalary.sum("amount", {
+      where: {
+        ...whereCondition,
+        status: { [Op.notIn]: ["Paid"] },
+      },
+    });
+
+    /* ===============================
+       TOTAL PAID
+    =============================== */
+
+    const totalPaid = await TutorSalary.sum("amount", {
+      where: {
+        ...whereCondition,
+        status: "Paid",
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        todayDue: todayDue || 0,
+        monthDue: monthDue || 0,
+        totalPending: totalPending || 0,
+        totalPaid: totalPaid || 0,
+      },
+    });
+  } catch (error) {
+    logger.error("GET TUTOR SALARY SUMMARY ERROR", {
+      message: error.message,
+      stack: error.stack,
+    });
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch tutor salary summary",
+    });
+  }
+};

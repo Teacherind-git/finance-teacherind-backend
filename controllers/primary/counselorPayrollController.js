@@ -24,7 +24,7 @@ exports.getCounselorPayrollList = async (req, res) => {
         "totalDeductions",
         "payrollMonth",
       ],
-      "fullName"
+      "fullName",
     );
 
     /* -------------------------
@@ -34,9 +34,7 @@ exports.getCounselorPayrollList = async (req, res) => {
     let counselorWhere = { role: 2, status: 1 };
 
     if (search) {
-      counselorWhere[Op.or] = [
-        { fullname: { [Op.like]: `%${search}%` } }
-      ];
+      counselorWhere[Op.or] = [{ fullname: { [Op.like]: `%${search}%` } }];
     }
 
     const counselors = await User.findAll({
@@ -214,34 +212,31 @@ exports.createOrUpdatePayroll = async (req, res) => {
 
 /* =========================
    COUNSELOR PAYROLL SUMMARY
-   (CURRENT MONTH)
+   (PREVIOUS MONTH)
 ========================= */
+
 exports.getCounselorPayrollSummary = async (req, res) => {
   try {
-    // Current month range
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
+    const now = new Date();
+
+    // Previous month start
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const endOfMonth = new Date(
-      startOfMonth.getFullYear(),
-      startOfMonth.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999,
-    );
+    // Previous month end
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    endOfMonth.setHours(23, 59, 59, 999);
 
     /* -------------------------
        TOTAL ACTIVE COUNSELORS
     -------------------------- */
     const totalCounselors = await User.count({
       where: {
-        role: 2, // counselor
-        status: 1, // active
+        role: 2,
+        status: 1,
       },
     });
+
     /* -------------------------
        COMPLETED PAYROLLS
     -------------------------- */
@@ -253,6 +248,7 @@ exports.getCounselorPayrollSummary = async (req, res) => {
         },
       },
     });
+
     /* -------------------------
        PENDING PAYROLLS
     -------------------------- */

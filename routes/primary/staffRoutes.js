@@ -10,7 +10,7 @@ router.post(
   "/",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   upload.fields([{ name: "profilePhoto", maxCount: 1 }]),
-  controller.createStaff
+  controller.createStaff,
 );
 
 // Update (Step-2 or any partial update)
@@ -18,13 +18,13 @@ router.put(
   "/:id",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   upload.none(),
-  controller.updateStaff
+  controller.updateStaff,
 );
 router.put("/salary/update-status/:id", salaryController.updateSalaryStatus);
 router.put(
   "/salary/assign",
   authorizeRoles("SuperAdmin", "Admin", "User"),
-  salaryController.assignStaffSalaries
+  salaryController.assignStaffSalaries,
 );
 
 // Upload documents (Step-3)
@@ -32,7 +32,7 @@ router.post(
   "/:id/documents",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   upload.fields([{ name: "documents", maxCount: 10 }]),
-  controller.uploadDocuments
+  controller.uploadDocuments,
 );
 
 // Read
@@ -43,22 +43,22 @@ router.get("/summary", controller.getStaffSummary);
 router.get("/salary", salaryController.getAllSalaries);
 router.get(
   "/salary/non-assigned",
-  salaryController.getNonAssignedStaffSalaries
+  salaryController.getNonAssignedStaffSalaries,
 );
+router.get("/salary/summary", salaryController.getStaffSalarySummary);
 router.get("/salary/receipt/:id", salaryController.downloadReceipt);
 router.get("/:id", controller.getStaff);
-
 
 // Delete
 router.delete(
   "/:id",
   authorizeRoles("SuperAdmin", "Admin", "User"),
-  controller.deleteStaff
+  controller.deleteStaff,
 );
 router.delete(
   "/document/:docId",
   authorizeRoles("SuperAdmin", "Admin", "User"),
-  controller.deleteDocument
+  controller.deleteDocument,
 );
 
 module.exports = router;

@@ -220,33 +220,28 @@ exports.getPayrollAudit = async (req, res) => {
 };
 
 /* =========================
-   PAYROLL SUMMARY (CURRENT MONTH)
+   PAYROLL SUMMARY (PREVIOUS MONTH)
 ========================= */
 exports.getCurrentMonthPayrollSummary = async (req, res) => {
   try {
-    // Start & End of current month
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
+    const now = new Date();
+
+    // Previous month start
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     startOfMonth.setHours(0, 0, 0, 0);
 
-    const endOfMonth = new Date(
-      startOfMonth.getFullYear(),
-      startOfMonth.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999,
-    );
+    // Previous month end
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    endOfMonth.setHours(23, 59, 59, 999);
 
-    // 1️⃣ Total active staff
+    /* 1️⃣ Total active staff */
     const totalStaff = await Staff.count({
       where: {
-        isDeleted: false, // if you have soft delete in staff
+        isDeleted: false,
       },
     });
 
-    // 2️⃣ Payrolls created for current month
+    /* 2️⃣ Payrolls created for previous month */
     const completedPayrolls = await StaffPayroll.count({
       where: {
         isDeleted: false,
@@ -256,11 +251,11 @@ exports.getCurrentMonthPayrollSummary = async (req, res) => {
       },
     });
 
-    // 3️⃣ Pending payrolls
+    /* 3️⃣ Pending payrolls */
     const pendingPayrolls = totalStaff - completedPayrolls;
 
     res.json({
-      message: "Current month payroll summary",
+      message: "Previous month payroll summary",
       data: {
         total: totalStaff,
         completed: completedPayrolls,
