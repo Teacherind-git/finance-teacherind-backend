@@ -4,6 +4,7 @@ const BasePay = require("../../models/primary/BasePay");
 const ClassRange = require("../../models/primary/ClassRange");
 const Syllabus = require("../../models/primary/Syllabus");
 const User = require("../../models/primary/User");
+const logger = require("../../utils/logger");
 
 async function seedBasePay() {
   try {
