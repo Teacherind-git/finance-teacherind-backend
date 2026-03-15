@@ -27,8 +27,8 @@ const createSuperAdmin = async () => {
       logger.info("🟢 Created SuperAdmin role");
     }
 
-    const email = process.env.SUPERADMIN_EMAIL || "superadmin@example.com";
-    const password = process.env.SUPERADMIN_PASSWORD || "SuperAdmin123!";
+    const email = process.env.SUPERADMIN_EMAIL || "admin2876@teacherind.com";
+    const password = process.env.SUPERADMIN_PASSWORD || "X9v$L2q#T7m@R4z!";
 
     // Check if SuperAdmin user exists
     const existingUser = await User.findOne({ where: { email } });
