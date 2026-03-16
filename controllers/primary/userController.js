@@ -161,7 +161,7 @@ exports.createUser = async (req, res) => {
       position: position || "",
       phone: phone || "",
       taxId: taxId || "",
-      address: address || {},
+      address: address || "",
       createdBy: req.user.id,
       updatedBy: req.user.id,
     });
