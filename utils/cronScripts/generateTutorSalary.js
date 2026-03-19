@@ -190,9 +190,13 @@ async function generateTutorSalary() {
 
         const classUnits = sc.duration / 60;
 
+        // Track counts (optional, for reporting)
         if (sc.status === 2) attendedClasses += classUnits;
         if (sc.status === 0) missedClasses += classUnits;
         if (sc.status === 3) rescheduledClasses += classUnits;
+
+        // ✅ ONLY process salary if attended
+        if (sc.status !== 2) continue;
 
         const secClass = await SecondaryClass.findOne({
           where: { id: sc.class_id },
@@ -215,6 +219,7 @@ async function generateTutorSalary() {
 
         if (!payrollItem) continue;
 
+        // ✅ FINAL: only attended class contributes
         totalBasePay += payrollItem.basePay * classUnits;
       }
 
@@ -277,23 +282,52 @@ async function generateTutorSalary() {
            CREATE SALARY
         --------------------------- */
 
-        await TutorSalary.create(
-          {
-            payrollId: payroll?.id,
-            payrollMonth,
+        let salary = await TutorSalary.findOne({
+          where: {
             tutorId,
-            type: "TUTOR",
-            amount: netSalary,
-            salaryDate,
-            dueDate,
-            finalDueDate,
-            status: "Pending",
-            assignedTo: financeManagerId,
-            createdBy: adminUserId,
-            updatedBy: adminUserId,
+            payrollMonth: {
+              [Op.between]: [startDate, endDate],
+            },
+            isDeleted: false,
           },
-          { transaction },
-        );
+          transaction,
+        });
+
+        if (salary) {
+          logger.info(`🔄 Updating existing salary for Tutor ${tutorId}`);
+
+          await salary.update(
+            {
+              amount: netSalary,
+              salaryDate,
+              dueDate,
+              finalDueDate,
+              assignedTo: financeManagerId,
+              updatedBy: adminUserId,
+            },
+            { transaction },
+          );
+        } else {
+          logger.info(`🆕 Creating new salary for Tutor ${tutorId}`);
+
+          await TutorSalary.create(
+            {
+              payrollId: payroll?.id,
+              payrollMonth,
+              tutorId,
+              type: "TUTOR",
+              amount: netSalary,
+              salaryDate,
+              dueDate,
+              finalDueDate,
+              status: "Pending",
+              assignedTo: financeManagerId,
+              createdBy: adminUserId,
+              updatedBy: adminUserId,
+            },
+            { transaction },
+          );
+        }
 
         await transaction.commit();
 

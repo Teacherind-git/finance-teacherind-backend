@@ -9,6 +9,11 @@ const TutorPayroll = sequelizePrimary.define(
       allowNull: false,
     },
 
+    employeeCode: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
     payrollMonth: {
       type: DataTypes.DATE,
       allowNull: true,

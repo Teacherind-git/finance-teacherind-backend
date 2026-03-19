@@ -36,7 +36,13 @@ exports.saveTutorPayroll = async (req, res) => {
     });
 
     const { id } = req.params;
-    const { tutorId, payrollMonth, items = [], remark } = req.body;
+    const {
+      tutorId,
+      employeeCode,
+      payrollMonth,
+      items = [],
+      remark,
+    } = req.body;
 
     let payroll;
     let action = "CREATE";
@@ -62,10 +68,10 @@ exports.saveTutorPayroll = async (req, res) => {
       }
 
       oldData = payroll.toJSON();
-
       await payroll.update(
         {
           remark,
+          employeeCode,
           updatedBy: req.user?.id || 10,
         },
         { transaction },
@@ -94,6 +100,7 @@ exports.saveTutorPayroll = async (req, res) => {
       payroll = await TutorPayroll.create(
         {
           tutorId,
+          employeeCode,
           payrollMonth,
           remark,
           createdBy: req.user?.id || 10,
@@ -125,6 +132,7 @@ exports.saveTutorPayroll = async (req, res) => {
       return {
         tutorPayrollId: payroll.id,
         tutorId,
+        employeeCode,
         classId: item.classId,
         syllabusId: item.syllabusId,
         board: item.board,
@@ -155,6 +163,7 @@ exports.saveTutorPayroll = async (req, res) => {
     await PayrollAudit.create({
       payrollId: payroll.id,
       staffId: tutorId,
+      employeeCode,
       staffType: "TUTOR",
       action,
       oldData,
@@ -241,7 +250,7 @@ exports.getTutorPayrolls = async (req, res) => {
      * -------------------------------------------------- */
     const tutors = await User.findAll({
       where: tutorWhere,
-      attributes: ["id", "fullname"],
+      attributes: ["id", "fullname", "phone"],
       limit,
       offset,
       raw: true,
@@ -342,11 +351,12 @@ exports.getTutorPayrolls = async (req, res) => {
           tutorId: tutor.id,
         });
       }
-
       return {
         id: payroll?.id ?? null,
         tutorId: tutor.id,
+        employeeId: payroll?.employeeCode,
         fullName: tutor.fullname,
+        contact: tutor.phone,
         grossSalary: payroll?.grossSalary ?? 0,
         netSalary: payroll?.netSalary ?? 0,
         payrollMonth: payroll?.payrollMonth ?? null,
@@ -618,7 +628,6 @@ exports.updateTutorPayroll = async (req, res) => {
 ========================= */
 exports.getTutorPayrollSummary = async (req, res) => {
   try {
-
     const now = new Date();
 
     // Previous month start
@@ -634,8 +643,8 @@ exports.getTutorPayrollSummary = async (req, res) => {
     -------------------------- */
     const totalTutors = await User.count({
       where: {
-        role: 3,     // tutor role
-        status: 1,   // active
+        role: 3, // tutor role
+        status: 1, // active
       },
     });
 
@@ -665,7 +674,6 @@ exports.getTutorPayrollSummary = async (req, res) => {
         pending: pendingPayrolls < 0 ? 0 : pendingPayrolls,
       },
     });
-
   } catch (err) {
     logger.error("Tutor payroll summary failed", err);
 
