@@ -318,7 +318,15 @@ exports.getTutorPayrolls = async (req, res) => {
           ],
         },
       ],
-      order: [["createdAt", sortOrder]],
+      order: [
+        ["createdAt", sortOrder], // parent sorting
+        [
+          { model: TutorPayrollItem, as: "items" },
+          { model: Class, as: "class" },
+          "number",
+          "ASC",
+        ],
+      ],
     });
 
     logger.info("Payrolls fetched", {

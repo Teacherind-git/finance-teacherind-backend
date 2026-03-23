@@ -159,12 +159,14 @@ async function generateTutorSalary() {
       /* --------------------------
          FETCH SCHEDULES
       --------------------------- */
-
       const schedules = await ClassSchedule.findAll({
         where: {
           tutor: tutorId,
           start: {
-            [Op.between]: [formatDate(startDate), formatDate(endDate)],
+            [Op.between]: [
+              `${formatDate(startDate)} 00:00:00`,
+              `${formatDate(endDate)} 23:59:59`,
+            ],
           },
         },
         attributes: ["id", "class_id", "duration", "status"],
