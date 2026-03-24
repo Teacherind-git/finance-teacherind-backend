@@ -22,9 +22,7 @@ exports.getAllTutorSalaries = async (req, res) => {
 
     if (req.user?.department === "HR") {
       whereCondition.status = "Pending";
-    }
-
-    if (
+    } else if (
       req.user?.department === "Finance" &&
       req.user?.position === "Manager"
     ) {
