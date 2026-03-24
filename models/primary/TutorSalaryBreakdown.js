@@ -33,10 +33,6 @@ const TutorSalaryBreakdown = sequelizePrimary.define(
     tutorId: {
       type: DataTypes.INTEGER,
       allowNull: false,
-      references: {
-        model: "users",
-        key: "id",
-      },
     },
 
     classNumber: {
