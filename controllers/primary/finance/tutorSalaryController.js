@@ -1,5 +1,6 @@
 const TutorSalary = require("../../../models/primary/TutorSalary");
 const TutorPayroll = require("../../../models/primary/TutorPayroll");
+const TutorSalaryBreakdown = require("../../../models/primary/TutorSalaryBreakdown");
 const SecondaryUser = require("../../../models/secondary/User");
 const { getPaginationParams } = require("../../../utils/pagination");
 const { Op } = require("sequelize");
@@ -23,8 +24,14 @@ exports.getAllTutorSalaries = async (req, res) => {
       whereCondition.status = "Pending";
     }
 
-    if (req.user?.department === "Finance") {
+    if (
+      req.user?.department === "Finance" &&
+      req.user?.position === "Manager"
+    ) {
       whereCondition.status = { [Op.ne]: "Pending" };
+    } else {
+      whereCondition.status = { [Op.ne]: "Pending" };
+      whereCondition.assignedTo = req.user.id;
     }
 
     /* ===============================
@@ -192,6 +199,8 @@ exports.updateTutorSalaryStatus = async (req, res) => {
 
     salary.status = status;
     salary.updatedBy = req.user?.id || null;
+
+    if (status === "Approved") salary.approvedBy = req.user?.id || null;
 
     if (status === "Paid") salary.paidDate = new Date();
     if (status !== "Paid") salary.paidDate = null;
@@ -438,60 +447,58 @@ exports.getTutorSalarySummary = async (req, res) => {
     const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
 
     const whereCondition = { isDeleted: false };
+    const { roleId, department, position, id: userId } = req.user;
 
     /* ===============================
-       DEPARTMENT FILTER
+       ROLE / DEPARTMENT BASED FILTER
     =============================== */
-
-    if (req.user?.department === "HR") {
+    if (department === "HR" && roleId === 3) {
+      // HR Manager sees only pending
       whereCondition.status = "Pending";
-    }
-
-    if (req.user?.department === "Finance") {
-      whereCondition.status = { [Op.ne]: "Pending" };
+    } else if (department === "Finance" && position === "Manager") {
+      // Finance Manager sees all non-pending
+      whereCondition.status = { [Op.notIn]: ["Pending", "Paid"] };
+    } else if (department === "Finance" && position !== "Manager") {
+      // Finance Staff sees only non-pending assigned to themselves
+      whereCondition.status = { [Op.notIn]: ["Pending", "Paid"] };
+      whereCondition.assignedTo = userId;
     }
 
     /* ===============================
        TODAY DUE
     =============================== */
-
     const todayDue = await TutorSalary.sum("amount", {
       where: {
         ...whereCondition,
         dueDate: today,
-        status: { [Op.ne]: "Paid" },
       },
     });
 
     /* ===============================
        MONTH DUE
     =============================== */
-
     const monthDue = await TutorSalary.sum("amount", {
       where: {
         ...whereCondition,
         dueDate: {
           [Op.between]: [startOfMonth, endOfMonth],
         },
-        status: { [Op.ne]: "Paid" },
       },
     });
 
     /* ===============================
        TOTAL PENDING
     =============================== */
-
     const totalPending = await TutorSalary.sum("amount", {
       where: {
         ...whereCondition,
-        status: { [Op.notIn]: ["Paid"] },
+        status: { [Op.ne]: "Paid" },
       },
     });
 
     /* ===============================
        TOTAL PAID
     =============================== */
-
     const totalPaid = await TutorSalary.sum("amount", {
       where: {
         ...whereCondition,
@@ -518,5 +525,27 @@ exports.getTutorSalarySummary = async (req, res) => {
       success: false,
       message: "Failed to fetch tutor salary summary",
     });
+  }
+};
+/* -----------------------------------------------------
+   6. GET TUTOR SALARY BREAKDOWNS
+----------------------------------------------------- */
+exports.getSalaryWithBreakdown = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const salary = await TutorSalary.findOne({
+      where: { id: id },
+      include: [
+        {
+          model: TutorSalaryBreakdown,
+          as: "breakdowns",
+        },
+      ],
+    });
+
+    res.json({ success: true, data: salary });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
   }
 };

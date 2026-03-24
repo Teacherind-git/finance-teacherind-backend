@@ -21,13 +21,17 @@ exports.getAllSalaries = async (req, res) => {
        DEPARTMENT FILTER
     =============================== */
     if (req.user?.department === "HR") {
-      whereCondition.status = {
-        [Op.notIn]: ["Paid", "Accepted"],
-      };
+      whereCondition.status = "Pending";
     }
 
-    if (req.user?.department === "Finance") {
+    if (
+      req.user?.department === "Finance" &&
+      req.user?.position === "Manager"
+    ) {
       whereCondition.status = { [Op.ne]: "Pending" };
+    } else {
+      whereCondition.status = { [Op.ne]: "Pending" };
+      whereCondition.assignedTo = req.user.id;
     }
 
     /* ===============================
@@ -273,6 +277,7 @@ exports.updateSalaryStatus = async (req, res) => {
 
     salary.status = status;
     salary.updatedBy = req.user?.id || null;
+    if (status === "Approved") salary.approvedBy = req.user?.id || null;
 
     if (status === "Paid") salary.paidDate = new Date();
     if (status !== "Paid") salary.paidDate = null;
@@ -560,48 +565,49 @@ exports.getStaffSalarySummary = async (req, res) => {
 
     const whereCondition = { isDeleted: false };
 
+    const { roleId, department, position, id: userId } = req.user;
+
     /* ===============================
-       DEPARTMENT FILTER
+       ROLE / DEPARTMENT BASED FILTER
     =============================== */
 
-    if (req.user?.department === "HR") {
+    if (department === "HR" && roleId === 3) {
+      // HR Manager sees only pending
       whereCondition.status = "Pending";
-    }
-
-    if (req.user?.department === "Finance") {
-      whereCondition.status = { [Op.ne]: "Pending" };
+    } else if (department === "Finance" && position === "Manager") {
+      // Finance Manager sees all non-pending
+      whereCondition.status = { [Op.notIn]: ["Pending", "Paid"] };
+    } else if (department === "Finance" && position !== "Manager") {
+      // Finance Staff sees only non-pending salaries assigned to themselves
+      whereCondition.status = { [Op.notIn]: ["Pending", "Paid"] };
+      whereCondition.assignedTo = userId;
     }
 
     /* ===============================
        TODAY DUE
     =============================== */
-
     const todayDue = await StaffSalary.sum("amount", {
       where: {
         ...whereCondition,
         dueDate: today,
-        status: { [Op.ne]: "Paid" },
       },
     });
 
     /* ===============================
        MONTH DUE
     =============================== */
-
     const monthDue = await StaffSalary.sum("amount", {
       where: {
         ...whereCondition,
         dueDate: {
           [Op.between]: [startOfMonth, endOfMonth],
         },
-        status: { [Op.ne]: "Paid" },
       },
     });
 
     /* ===============================
        TOTAL PENDING
     =============================== */
-
     const totalPending = await StaffSalary.sum("amount", {
       where: {
         ...whereCondition,
@@ -612,7 +618,6 @@ exports.getStaffSalarySummary = async (req, res) => {
     /* ===============================
        TOTAL PAID
     =============================== */
-
     const totalPaid = await StaffSalary.sum("amount", {
       where: {
         ...whereCondition,

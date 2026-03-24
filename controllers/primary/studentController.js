@@ -14,7 +14,7 @@ exports.createStudent = async (req, res) => {
   const t = await sequelizePrimary.transaction();
   try {
     const userId = req.user.id;
-    const { name, contact, details } = req.body;
+    const { name, contact, alternateContact, source, details } = req.body;
 
     logger.info("Creating student", {
       name,
@@ -26,7 +26,14 @@ exports.createStudent = async (req, res) => {
     // 1. Create student
     // -----------------------------
     const student = await Student.create(
-      { name, contact, createdBy: userId, updatedBy: userId },
+      {
+        name,
+        contact,
+        alternateContact,
+        source,
+        createdBy: userId,
+        updatedBy: userId,
+      },
       { transaction: t },
     );
 

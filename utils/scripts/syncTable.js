@@ -1,6 +1,6 @@
 const { sequelizePrimary } = require("../../config/db");
-const Expense = require("../../models/primary/TutorPayroll"); // renamed for clarity
-const TutorPayroll = require("../../models/primary/TutorPayroll");
+const Expense = require("../../models/primary/TutorSalaryBreakdown"); // renamed for clarity
+const TutorPayroll = require("../../models/primary/TutorSalaryBreakdown");
 const logger = require("../../utils/logger"); // optional centralized logger
 
 (async () => {

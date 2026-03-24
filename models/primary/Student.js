@@ -12,6 +12,14 @@ const Student = sequelizePrimary.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    alternateContact: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    source: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     remark: {
       type: DataTypes.TEXT,
       allowNull: true,
@@ -21,8 +29,8 @@ const Student = sequelizePrimary.define(
       allowNull: true,
     },
     status: {
-      type: DataTypes.ENUM("Onboard", "Active", "Inactive", "Pending"),
-      defaultValue: "Onboard",
+      type: DataTypes.ENUM("Demo", "Converted", "Discarded"),
+      defaultValue: "Demo",
       allowNull: false,
     },
     isDeleted: {
