@@ -35,6 +35,12 @@ const TutorPayroll = sequelizePrimary.define(
       defaultValue: 0,
     },
 
+    baseSalary: {
+      type: DataTypes.FLOAT,
+      allowNull: false,
+      defaultValue: 0,
+    },
+
     grossSalary: {
       type: DataTypes.FLOAT,
       allowNull: false,

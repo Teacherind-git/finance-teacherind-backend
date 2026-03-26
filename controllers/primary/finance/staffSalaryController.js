@@ -21,7 +21,6 @@ exports.getAllSalaries = async (req, res) => {
        DEPARTMENT FILTER
     =============================== */
     if (req.user?.department === "HR") {
-     
     } else if (
       req.user?.department === "Finance" &&
       req.user?.position === "Manager"
@@ -331,7 +330,38 @@ exports.downloadReceipt = async (req, res) => {
     }
 
     const payroll = salary.staffPayroll;
+
     const { start, end } = getMonthStartAndEnd(payroll.payrollMonth);
+
+    // Earnings rows dynamic
+    const earningsHtml =
+      payroll?.earnings
+        ?.map((e) => {
+          return `
+      <tr>
+        <td>${e.type}</td>
+        <td class="right">${e.amount}</td>
+        <td></td>
+        <td></td>
+      </tr>
+    `;
+        })
+        .join("") || "";
+
+    // Deductions rows dynamic
+    const deductionsHtml =
+      payroll?.deductions
+        ?.map((d) => {
+          return `
+      <tr>
+        <td></td>
+        <td></td>
+        <td>${d.type}</td>
+        <td class="right">${d.amount}</td>
+      </tr>
+    `;
+        })
+        .join("") || "";
 
     const data = {
       payPeriod: `${formatDate(start)} to ${formatDate(end)}`,
@@ -345,13 +375,15 @@ exports.downloadReceipt = async (req, res) => {
             year: "numeric",
           })
         : "",
+      baseSalary: payroll.baseSalary,
       grossSalary: payroll.grossSalary || salary.amount,
-      bonus: payroll.bonus || 0,
       totalDeductions: payroll.totalDeductions || 0,
       grossSalary: payroll.grossSalary || salary.amount,
       gstPercent: payroll.gstPercent || 0,
       gstAmount: payroll.gstAmount || 0,
       netPay: salary.amount,
+      earningsHtml,
+      deductionsHtml,
     };
 
     const html = salarySlipTemplate(data);

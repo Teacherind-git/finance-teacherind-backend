@@ -123,21 +123,21 @@ module.exports = (data) => `
       <tr>
         <td>Month</td>
         <td>${data.month}</td>
-        <td>Late Arrival Deduction</td>
-        <td class="right">${data.lateDeduction}</td>
+        <td></td>
+        <td class="right"></td>
       </tr>
 
       <tr>
         <td>Total Classes Taken</td>
         <td>${data.totalClasses}</td>
-        <td>Leave Deduction</td>
-        <td class="right">${data.leaveDeduction}</td>
+        <td></td>
+        <td class="right"></td>
       </tr>
 
 
       <tr>
         <td>Base Salary</td>
-        <td class="right">${data.grossSalary}</td>
+        <td class="right">${data.basePay}</td>
         <td></td>
         <td></td>
       </tr>
@@ -151,11 +151,26 @@ module.exports = (data) => `
         <th>Total Deductions</th>
         <th class="right">${data.totalDeductions}</th>
       </tr>
-       <tr>
-        <th>Net Pay</th>
-        <th class="right">₹ ${data.netPay}</th>
-      </tr>
+     <tr>
+  <th colspan="4" class="right" style="font-size:16px;">
+    Net Pay: ₹ ${data.netPay}
+  </th>
+</tr>
     </table>
+
+    <h3 style="margin-top: 30px; font-size: 16px;">Class Breakdown</h3>
+
+<table>
+  <tr>
+    <th>Class</th>
+    <th>Syllabus</th>
+    <th>Count</th>
+    <th>Base Pay</th>
+    <th>Total Pay</th>
+  </tr>
+
+  ${data.breakdownHtml}
+</table>
 
     <!-- GST SECTION -->
     <div class="gst-box">

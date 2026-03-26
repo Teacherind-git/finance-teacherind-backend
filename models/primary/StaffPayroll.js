@@ -25,12 +25,11 @@ const StaffPayroll = sequelizePrimary.define(
       defaultValue: 0,
     },
 
-    grossSalary: {
+    baseSalary: {
       type: DataTypes.FLOAT,
       allowNull: false,
       defaultValue: 0,
     },
-
     // ✅ Earnings array
     earnings: {
       type: DataTypes.JSON,

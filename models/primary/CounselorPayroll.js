@@ -20,7 +20,7 @@ const CounselorPayroll = sequelizePrimary.define(
       defaultValue: 0,
     },
 
-    grossSalary: {
+    baseSalary: {
       type: DataTypes.FLOAT,
       allowNull: false,
       defaultValue: 0,
@@ -83,7 +83,7 @@ const CounselorPayroll = sequelizePrimary.define(
   {
     tableName: "counselor_payrolls",
     timestamps: true,
-  }
+  },
 );
 
 module.exports = CounselorPayroll;

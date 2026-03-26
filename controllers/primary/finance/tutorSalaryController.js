@@ -227,7 +227,16 @@ exports.downloadReceipt = async (req, res) => {
 
     const salary = await TutorSalary.findOne({
       where: { id: salaryId, isDeleted: false, status: "Paid" },
-      include: [{ model: TutorPayroll, as: "payroll" }],
+      include: [
+        {
+          model: TutorPayroll,
+          as: "payroll",
+        },
+        {
+          model: TutorSalaryBreakdown,
+          as: "breakdowns",
+        },
+      ],
     });
 
     if (!salary) {
@@ -252,8 +261,6 @@ exports.downloadReceipt = async (req, res) => {
           year: "numeric",
         })
       : "";
-    console.log(salary, "sal");
-
     // Earnings rows dynamic
     const earningsHtml =
       salary.payroll?.earnings
@@ -284,6 +291,41 @@ exports.downloadReceipt = async (req, res) => {
         })
         .join("") || "";
 
+    // Group breakdown by class + syllabus
+    const breakdownGroups = {};
+
+    salary.breakdowns.forEach((row) => {
+      const key = `${row.classNumber}-${row.syllabusName}`;
+
+      if (!breakdownGroups[key]) {
+        breakdownGroups[key] = {
+          classNumber: row.classNumber,
+          syllabusName: row.syllabusName,
+          basePay: row.basePay,
+          count: 0,
+          totalBasePay: 0,
+        };
+      }
+
+      breakdownGroups[key].count += 1;
+      breakdownGroups[key].totalBasePay += row.amount;
+    });
+
+    // Convert grouped result into HTML strings
+    const breakdownHtml = Object.values(breakdownGroups)
+      .map((b) => {
+        return `
+      <tr>
+        <td>${b.classNumber}</td>
+        <td>${b.syllabusName}</td>
+        <td class="right">${b.count}</td>
+        <td class="right">${b.basePay}</td>
+        <td class="right">${b.totalBasePay}</td>
+      </tr>
+    `;
+      })
+      .join("");
+
     const data = {
       payPeriod: "",
       payDate: salary.paidDate,
@@ -291,20 +333,17 @@ exports.downloadReceipt = async (req, res) => {
       employeeId: `TUTOR-${tutor.id}`,
       position: "Tutor",
       month,
-      totalClasses: salary.payroll?.totalClasses || 0,
-      grossSalary: salary.payroll?.grossSalary || salary.amount,
-      bonus: 0,
-      lateDeduction: 0,
-      leaveDeduction: 0,
-      otherDeduction: 0,
+      totalClasses: salary.payroll?.attendedClasses || 0,
       totalDeductions: salary.payroll?.totalDeductions,
       totalEarnings: salary.totalEarnings,
       grossSalary: salary.payroll?.grossSalary || salary.amount,
+      basePay: salary.payroll?.baseSalary,
       gstPercent: 0,
       gstAmount: 0,
       netPay: salary.payroll?.netSalary || salary.amount,
       earningsHtml,
       deductionsHtml,
+      breakdownHtml,
     };
 
     const html = salarySlipTemplate(data);

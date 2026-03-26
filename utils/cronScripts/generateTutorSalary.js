@@ -306,6 +306,7 @@ async function generateTutorSalary() {
               totalClasses,
               attendedClasses,
               missedClasses,
+              baseSalary:totalBasePay,
               grossSalary: totalBasePay,
               grossSalary,
               netSalary,

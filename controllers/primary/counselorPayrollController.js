@@ -72,7 +72,7 @@ exports.getCounselorPayrollList = async (req, res) => {
         fullName: c.fullname,
         department: c.department ?? "AcademicCounselor",
 
-        grossSalary: payroll.grossSalary ?? 0,
+        baseSalary: payroll.baseSalary ?? 0,
         grossSalary: payroll.grossSalary ?? 0,
         totalEarnings: payroll.totalEarnings ?? 0,
         totalDeductions: payroll.totalDeductions ?? 0,
@@ -166,7 +166,7 @@ exports.createOrUpdatePayroll = async (req, res) => {
         counselorId: payload.counselorId,
         payrollMonth: payload.payrollMonth,
 
-        grossSalary: payload.grossSalary,
+        baseSalary: payload.baseSalary,
         grossSalary: payload.grossSalary,
 
         earnings: payload.earnings || [],
@@ -294,7 +294,7 @@ exports.updateCounselorPayroll = async (req, res) => {
 
     await payroll.update({
       payrollMonth: payload.payrollMonth,
-      grossSalary: payload.grossSalary,
+      baseSalary: payload.baseSalary,
       grossSalary: payload.grossSalary,
 
       earnings: payload.earnings || [],

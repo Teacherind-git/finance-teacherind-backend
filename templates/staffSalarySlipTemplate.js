@@ -123,30 +123,29 @@ module.exports = (data) => `
       <tr>
         <td>Month</td>
         <td>${data.month}</td>
-        <td> Deduction</td>
-        <td class="right">${data.totalDeductions}</td>
+        <td></td>
+        <td></td>
       </tr>
 
       <tr>
         <td>Base Salary</td>
-        <td class="right">${data.grossSalary}</td>
+        <td class="right">${data.baseSalary}</td>
         <td></td>
         <td></td>
       </tr>
 
-      <tr>
-        <td>Bonus</td>
-        <td class="right">${data.bonus}</td>
-        <td></td>
-        <td></td>
-      </tr>
+        ${data.earningsHtml}
+      ${data.deductionsHtml}
 
       <tr>
-        <th>Gross Salary</th>
+        <th>Total Earnings</th>
         <th class="right">${data.grossSalary}</th>
         <th>Total Deductions</th>
         <th class="right">${data.totalDeductions}</th>
       </tr>
+       <th colspan="4" class="right" style="font-size:16px;">
+    Net Pay: ₹ ${data.netPay}
+  </th>
     </table>
 
     <!-- GST SECTION -->
@@ -156,12 +155,6 @@ module.exports = (data) => `
       <p>GST Amount: ₹ ${data.gstAmount}</p>
     </div>
 
-    <table>
-      <tr>
-        <th>Net Pay</th>
-        <th class="right">₹ ${data.netPay}</th>
-      </tr>
-    </table>
 
     <div class="signature">
       <img src="http://localhost:5000/public/logo/sign.png" alt="Signature" class="signature-img" />
