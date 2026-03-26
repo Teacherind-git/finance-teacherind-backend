@@ -333,33 +333,51 @@ exports.downloadReceipt = async (req, res) => {
 
     const { start, end } = getMonthStartAndEnd(payroll.payrollMonth);
 
+    // Normalize earnings into an array
+    const earningsArr = Array.isArray(payroll?.earnings)
+      ? payroll.earnings
+      : typeof payroll?.earnings === "string"
+        ? JSON.parse(payroll.earnings || "[]")
+        : payroll?.earnings
+          ? [payroll.earnings] // if it's a single object
+          : [];
+
     // Earnings rows dynamic
     const earningsHtml =
-      payroll?.earnings
-        ?.map((e) => {
+      earningsArr
+        .map((e) => {
           return `
-      <tr>
-        <td>${e.type}</td>
-        <td class="right">${e.amount}</td>
-        <td></td>
-        <td></td>
-      </tr>
-    `;
+        <tr>
+          <td>${e.type || ""}</td>
+          <td class="right">${e.amount || 0}</td>
+          <td></td>
+          <td></td>
+        </tr>
+      `;
         })
         .join("") || "";
 
+    // Normalize deductions into an array
+    const deductionsArr = Array.isArray(payroll?.deductions)
+      ? payroll.deductions
+      : typeof payroll?.deductions === "string"
+        ? JSON.parse(payroll.deductions || "[]")
+        : payroll?.deductions
+          ? [payroll.deductions] // if object
+          : [];
+
     // Deductions rows dynamic
     const deductionsHtml =
-      payroll?.deductions
-        ?.map((d) => {
+      deductionsArr
+        .map((d) => {
           return `
-      <tr>
-        <td></td>
-        <td></td>
-        <td>${d.type}</td>
-        <td class="right">${d.amount}</td>
-      </tr>
-    `;
+        <tr>
+          <td></td>
+          <td></td>
+          <td>${d.type || ""}</td>
+          <td class="right">${d.amount || 0}</td>
+        </tr>
+      `;
         })
         .join("") || "";
 

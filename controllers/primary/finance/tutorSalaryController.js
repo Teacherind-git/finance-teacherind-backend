@@ -262,34 +262,42 @@ exports.downloadReceipt = async (req, res) => {
         })
       : "";
     // Earnings rows dynamic
-    const earningsHtml =
-      salary.payroll?.earnings
-        ?.map((e) => {
-          return `
+    const earningsArr = Array.isArray(salary.payroll?.earnings)
+      ? salary.payroll.earnings
+      : typeof salary.payroll?.earnings === "string"
+        ? JSON.parse(salary.payroll.earnings || "[]")
+        : [];
+
+    const earningsHtml = earningsArr
+      .map((e) => {
+        return `
       <tr>
         <td>${e.type}</td>
         <td class="right">${e.amount}</td>
         <td></td>
         <td></td>
-      </tr>
-    `;
-        })
-        .join("") || "";
+      </tr>`;
+      })
+      .join("");
 
     // Deductions rows dynamic
-    const deductionsHtml =
-      salary.payroll?.deductions
-        ?.map((d) => {
-          return `
+    const deductionsArr = Array.isArray(salary.payroll?.deductions)
+      ? salary.payroll.deductions
+      : typeof salary.payroll?.deductions === "string"
+        ? JSON.parse(salary.payroll.deductions || "[]")
+        : [];
+
+    const deductionsHtml = deductionsArr
+      .map((d) => {
+        return `
       <tr>
         <td></td>
         <td></td>
         <td>${d.type}</td>
         <td class="right">${d.amount}</td>
-      </tr>
-    `;
-        })
-        .join("") || "";
+      </tr>`;
+      })
+      .join("");
 
     // Group breakdown by class + syllabus
     const breakdownGroups = {};
