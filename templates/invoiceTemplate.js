@@ -77,9 +77,16 @@ module.exports = (data) => `
       justify-content: space-between;
     }
 
-    .sign {
-      text-align: right;
-    }
+
+      .signature-box {
+  text-align: right;
+}
+
+.signature-img {
+  width: 150px;
+  display: block;
+  margin-left: auto;
+}
   </style>
 </head>
 
@@ -121,26 +128,26 @@ module.exports = (data) => `
     <!-- SERVICES TABLE -->
     <table>
       <tr>
-        <th>SERVICES</th>
-        <th>SAC</th>
-        <th>QTY</th>
-        <th>RATE</th>
-        <th>DISC.</th>
-        <th>AMOUNT</th>
+        <th class="left">SERVICES</th>
+        <th class="left">SAC</th>
+        <th class="left">QTY</th>
+        <th class="left">RATE</th>
+        <th class="left">DISC.</th>
+        <th class="left">AMOUNT</th>
       </tr>
 
       ${data.items
         ?.map(
           (i) => `
         <tr>
-          <td>${i.name}</td>
-          <td>${i.sac}</td>
-          <td>${i.qty}</td>
+          <td class="left">${i.name}<br> <b>${i.description}</b></td>
+          <td class="left">${i.sac}</td>
+          <td class="left">${i.qty}</td>
           <td class="right">${i.rate}</td>
           <td class="right">${i.discount}</td>
           <td class="right">${i.amount}</td>
         </tr>
-      `
+      `,
         )
         .join("")}
 
@@ -151,15 +158,7 @@ module.exports = (data) => `
       </tr>
     </table>
 
-    <!-- BANK DETAILS -->
-    <div class="bank-box">
-      <strong>BANK DETAILS</strong><br/><br/>
-      Name: teacherInd Loro Talento Pvt Ltd<br/>
-      IFSC Code: FDRL0002515<br/>
-      Account No: 25150200002750<br/>
-      Bank: Federal Bank, Kizhissery
-    </div>
-
+   
     <!-- TOTALS -->
     <table>
       <tr>
@@ -168,18 +167,31 @@ module.exports = (data) => `
       </tr>
     </table>
 
+     <!-- BANK DETAILS -->
+    <div class="bank-box">
+      <strong>BANK DETAILS</strong><br/><br/>
+      Name: teacherInd Loro Talento Pvt Ltd<br/>
+      IFSC Code: FDRL0002515<br/>
+      Account No: 25150200002750<br/>
+      Bank: Federal Bank, Kizhissery
+    </div>
+
+
     <p><strong>Total Amount (in words)</strong><br/>
       ${data.amountInWords}
     </p>
 
     <!-- FOOTER -->
-    <div class="footer">
-      <div>BILL OF SUPPLY ORIGINAL FOR RECIPIENT</div>
-      <div class="sign">
-        <strong>AUTHORISED SIGNATORY FOR</strong><br/>
-        teacherInd Loro Talento Pvt Ltd.
-      </div>
-    </div>
+   <div class="footer">
+  <div>BILL OF SUPPLY ORIGINAL FOR RECIPIENT</div>
+  
+  <div class="sign">
+    <img src="http://localhost:5000/public/logo/sign.png" alt="Signature" class="signature-img" />
+
+    <strong>AUTHORISED SIGNATORY FOR</strong><br/>
+    teacherInd Loro Talento Pvt Ltd.
+  </div>
+</div>
 
   </div>
 </body>

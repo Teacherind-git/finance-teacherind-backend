@@ -125,11 +125,9 @@ async function generateTutorSalary() {
 
     logger.info(`👨‍🏫 Tutors found: ${tutors.length}`);
 
-    const breakdownRows = [];
-
     for (const tutor of tutors) {
       const tutorId = tutor.id;
-
+      const breakdownRows = [];
       const tutorClasses = normalizeClasses(tutor.classes);
 
       if (!Array.isArray(tutorClasses) || tutorClasses.length === 0) {
@@ -247,19 +245,21 @@ async function generateTutorSalary() {
         // ✅ FINAL: only attended class contributes
         totalBasePay += payrollItem.basePay * classUnits;
         // Add breakdown row
-        breakdownRows.push({
-          tutorId,
-          classNumber: secClass.classnumber,
-          syllabusName: secClass.syllabusname,
-          studentName: student?.name || null,
-          basePay: payrollItem.basePay,
-          duration: sc.duration,
-          classUnits,
-          amount: payrollItem.basePay * classUnits, // store per row amount
-          status: sc.status,
-          createdBy: adminUserId,
-          updatedBy: adminUserId,
-        });
+        if (sc.status === 2) {
+          breakdownRows.push({
+            tutorId,
+            classNumber: secClass.classnumber,
+            syllabusName: secClass.syllabusname,
+            studentName: student?.name || null,
+            basePay: payrollItem.basePay,
+            duration: sc.duration,
+            classUnits: 1,
+            amount: payrollItem.basePay, // pay only for 1 class
+            status: sc.status,
+            createdBy: adminUserId,
+            updatedBy: adminUserId,
+          });
+        }
       }
 
       if (totalBasePay <= 0) {
@@ -306,7 +306,7 @@ async function generateTutorSalary() {
               totalClasses,
               attendedClasses,
               missedClasses,
-              baseSalary: totalBasePay,
+              grossSalary: totalBasePay,
               grossSalary,
               netSalary,
               totalEarnings: incrementAmount,
@@ -349,7 +349,7 @@ async function generateTutorSalary() {
         } else {
           logger.info(`🆕 Creating new salary for Tutor ${tutorId}`);
 
-          await TutorSalary.create(
+          salary = await TutorSalary.create(
             {
               payrollId: payroll?.id,
               payrollMonth,

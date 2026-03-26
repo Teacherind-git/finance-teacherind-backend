@@ -397,12 +397,24 @@ const getInvoiceData = async (studentId) => {
           {
             model: StudentDetail,
             as: "details",
-            attributes: ["startDate", "packagePrice", "discount", "totalPrice"],
+            attributes: [
+              "startDate",
+              "packagePrice",
+              "discount",
+              "totalPrice",
+              "duration",
+            ],
             include: [
               {
                 model: Package,
                 as: "package",
-                attributes: ["id", "name"],
+                attributes: [
+                  "id",
+                  "name",
+                  "classesPerMonth",
+                  "growthSession",
+                  "questionToolExam",
+                ],
               },
             ],
           },
@@ -427,10 +439,20 @@ const getInvoiceData = async (studentId) => {
    * 2️⃣ Convert packages into invoice items
    */
   const items = activeDetails.map((detail, index) => {
+    const pkg = detail.package;
+    const totalSessions =
+      (pkg.classesPerMonth || 0) +
+      (pkg.growthSession || 0) +
+      (pkg.questionToolExam || 0);
+
+    // Build description text
+    const description = `${totalSessions} sessions = ${pkg.classesPerMonth} classes + ${pkg.growthSession} growth + ${pkg.questionToolExam} exams`;
+
     return {
       name: detail.package.name,
+      description, // ⬅️ Added here
       sac: "999299",
-      qty: "1 MON",
+      qty: detail.duration + " MON",
       rate: detail.packagePrice,
       discount: detail.discount,
       amount: detail.totalPrice,

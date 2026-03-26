@@ -31,13 +31,13 @@ const User = sequelizeSecondary.define(
     remember_token: { type: DataTypes.STRING },
 
     istrainer: { type: DataTypes.TINYINT },
+    created_at: { type: DataTypes.DATE },
     updated_at: { type: DataTypes.DATE },
   },
   {
     tableName: "users",
     timestamps: false, // Laravel timestamps are not Sequelize defaults
-  }
+  },
 );
 
 module.exports = User;
-

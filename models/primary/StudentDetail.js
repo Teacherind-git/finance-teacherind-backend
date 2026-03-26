@@ -45,11 +45,16 @@ const StudentDetail = sequelizePrimary.define(
       type: DataTypes.DATE,
       allowNull: false,
     },
+    duration: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 1,
+    },
   },
   {
     tableName: "student_details",
     timestamps: true,
-  }
+  },
 );
 
 // Relations

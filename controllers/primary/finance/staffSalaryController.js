@@ -21,7 +21,7 @@ exports.getAllSalaries = async (req, res) => {
        DEPARTMENT FILTER
     =============================== */
     if (req.user?.department === "HR") {
-      whereCondition.status = "Pending";
+     
     } else if (
       req.user?.department === "Finance" &&
       req.user?.position === "Manager"
@@ -345,7 +345,7 @@ exports.downloadReceipt = async (req, res) => {
             year: "numeric",
           })
         : "",
-      baseSalary: payroll.baseSalary || salary.amount,
+      grossSalary: payroll.grossSalary || salary.amount,
       bonus: payroll.bonus || 0,
       totalDeductions: payroll.totalDeductions || 0,
       grossSalary: payroll.grossSalary || salary.amount,
@@ -508,7 +508,7 @@ exports.getNonAssignedStaffSalaries = async (req, res) => {
         user: staffDetails || { name: "", phone: "", email: "" },
         payroll: salary.payroll
           ? {
-              baseSalary: salary.payroll.baseSalary,
+              grossSalary: salary.payroll.grossSalary,
               grossSalary: salary.payroll.grossSalary,
               netSalary: salary.payroll.netSalary,
               totalWorkingDays: salary.payroll.totalWorkingDays,

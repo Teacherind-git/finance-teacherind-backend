@@ -8,7 +8,7 @@ exports.getAll = async (req, res) => {
 
     const packages = await Package.findAll({
       where: { isDeleted: false }, // ✅ exclude soft-deleted
-      order: [["createdAt", "DESC"]],
+      order: [["price", "ASC"]],
     });
 
     logger.info(`Packages fetched: ${packages.length}`);

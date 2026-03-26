@@ -102,6 +102,12 @@ module.exports = (data) => `
       text-align: right;
       font-size: 11px;
     }
+
+    .signature-img {
+      width: 150px;
+      display: block;
+      margin-left: auto;
+    }
   </style>
 </head>
 
@@ -171,7 +177,7 @@ module.exports = (data) => `
               <td>${item.tds.toFixed(2)}</td>
               <td>${item.balance.toFixed(2)}</td>
             </tr>
-          `
+          `,
             )
             .join("")}
 
@@ -195,6 +201,7 @@ module.exports = (data) => `
 
       <!-- FOOTER -->
       <div class="footer">
+        <img src="http://localhost:5000/public/logo/sign.png" alt="Signature" class="signature-img" />
         Authorized signatory for<br />
         <strong>${data.companyName}</strong>
       </div>

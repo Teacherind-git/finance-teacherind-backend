@@ -220,7 +220,8 @@ exports.updateStudent = async (req, res) => {
   const t = await sequelizePrimary.transaction();
   try {
     const userId = req.user.id;
-    const { name, contact, details } = req.body;
+    const { name, contact, alternateContact, source, status, details } =
+      req.body;
 
     logger.info("Updating student", {
       studentId: req.params.id,
@@ -236,7 +237,7 @@ exports.updateStudent = async (req, res) => {
     }
 
     await student.update(
-      { name, contact, updatedBy: userId },
+      { name, contact, alternateContact, source, status, updatedBy: userId },
       { transaction: t },
     );
 
@@ -324,24 +325,29 @@ exports.getStudentSummary = async (req, res) => {
   try {
     logger.info("Fetching student summary");
 
-    const [totalStudents, activeStudents, onboardStudents] = await Promise.all([
-      Student.count({
-        where: { isDeleted: false },
-      }),
-      Student.count({
-        where: { isDeleted: false, status: "Active" },
-      }),
-      Student.count({
-        where: { isDeleted: false, status: "Onboard" },
-      }),
-    ]);
+    const [totalStudents, demoStudents, convertedStudents, discardStudents] =
+      await Promise.all([
+        Student.count({
+          where: { isDeleted: false },
+        }),
+        Student.count({
+          where: { isDeleted: false, status: "Demo" },
+        }),
+        Student.count({
+          where: { isDeleted: false, status: "Converted" },
+        }),
+        Student.count({
+          where: { isDeleted: false, status: "Discarded" },
+        }),
+      ]);
 
     res.status(200).json({
       success: true,
       data: {
         totalStudents,
-        activeStudents,
-        onboardStudents,
+        demoStudents,
+        convertedStudents,
+        discardStudents,
       },
     });
   } catch (error) {

@@ -18,7 +18,7 @@ router.get(
 );
 router.get("/salary/non-assigned", salaryController.getNonAssignedTutorSalaries);
 router.get("/salary/receipt/:id", salaryController.downloadReceipt);
-router.get("/salary/:id/breakdown", salaryController.getSalaryWithBreakdown);
+router.get("/salary/:id/breakdown", salaryController.getSalaryBreakdowns);
 //Update
 router.put(
   "/salary/assign",

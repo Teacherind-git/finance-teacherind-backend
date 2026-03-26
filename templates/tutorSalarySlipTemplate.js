@@ -78,6 +78,12 @@ module.exports = (data) => `
       border: 1px solid #000;
       padding: 10px;
     }
+
+    .signature-img {
+      width: 150px;
+      display: block;
+      margin-left: auto;
+    }
   </style>
 </head>
 
@@ -128,32 +134,26 @@ module.exports = (data) => `
         <td class="right">${data.leaveDeduction}</td>
       </tr>
 
-      <tr>
-        <td>Rate per Class</td>
-        <td>${data.ratePerClass}</td>
-        <td>Penalty / Other</td>
-        <td class="right">${data.otherDeduction}</td>
-      </tr>
 
       <tr>
         <td>Base Salary</td>
-        <td class="right">${data.baseSalary}</td>
+        <td class="right">${data.grossSalary}</td>
         <td></td>
         <td></td>
       </tr>
 
-      <tr>
-        <td>Bonus</td>
-        <td class="right">${data.bonus}</td>
-        <td></td>
-        <td></td>
-      </tr>
+      ${data.earningsHtml}
+      ${data.deductionsHtml}
 
       <tr>
-        <th>Gross Salary</th>
+        <th>Total Earnings</th>
         <th class="right">${data.grossSalary}</th>
         <th>Total Deductions</th>
         <th class="right">${data.totalDeductions}</th>
+      </tr>
+       <tr>
+        <th>Net Pay</th>
+        <th class="right">₹ ${data.netPay}</th>
       </tr>
     </table>
 
@@ -164,14 +164,8 @@ module.exports = (data) => `
       <p>GST Amount: ₹ ${data.gstAmount}</p>
     </div>
 
-    <table>
-      <tr>
-        <th>Net Pay</th>
-        <th class="right">₹ ${data.netPay}</th>
-      </tr>
-    </table>
-
     <div class="signature">
+      <img src="http://localhost:5000/public/logo/sign.png" alt="Signature" class="signature-img" />
       <p><strong>Authorised Signatory</strong></p>
       <p>teacherInd Loro Talento Pvt Ltd.</p>
     </div>

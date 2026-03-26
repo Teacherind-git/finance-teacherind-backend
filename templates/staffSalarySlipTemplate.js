@@ -78,6 +78,12 @@ module.exports = (data) => `
       border: 1px solid #000;
       padding: 10px;
     }
+      
+    .signature-img {
+      width: 150px;
+      display: block;
+      margin-left: auto;
+    }
   </style>
 </head>
 
@@ -123,7 +129,7 @@ module.exports = (data) => `
 
       <tr>
         <td>Base Salary</td>
-        <td class="right">${data.baseSalary}</td>
+        <td class="right">${data.grossSalary}</td>
         <td></td>
         <td></td>
       </tr>
@@ -158,6 +164,7 @@ module.exports = (data) => `
     </table>
 
     <div class="signature">
+      <img src="http://localhost:5000/public/logo/sign.png" alt="Signature" class="signature-img" />
       <p><strong>Authorised Signatory</strong></p>
       <p>teacherInd Loro Talento Pvt Ltd.</p>
     </div>

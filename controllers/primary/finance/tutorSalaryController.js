@@ -21,7 +21,8 @@ exports.getAllTutorSalaries = async (req, res) => {
     =============================== */
 
     if (req.user?.department === "HR") {
-      whereCondition.status = "Pending";
+      // HR: no filter → see everything
+      // so DO NOT set whereCondition.status at all whereCondition.status = "Pending";
     } else if (
       req.user?.department === "Finance" &&
       req.user?.position === "Manager"
@@ -143,7 +144,7 @@ exports.getAllTutorSalaries = async (req, res) => {
             totalClasses: salary.payroll.totalClasses,
             attendedClasses: salary.payroll.attendedClasses,
             missedClasses: salary.payroll.missedClasses,
-            baseSalary: salary.payroll.baseSalary,
+            grossSalary: salary.payroll.grossSalary,
             grossSalary: salary.payroll.grossSalary,
             netSalary: salary.payroll.netSalary,
             deductions: salary.payroll.deductions || [],
@@ -251,6 +252,37 @@ exports.downloadReceipt = async (req, res) => {
           year: "numeric",
         })
       : "";
+    console.log(salary, "sal");
+
+    // Earnings rows dynamic
+    const earningsHtml =
+      salary.payroll?.earnings
+        ?.map((e) => {
+          return `
+      <tr>
+        <td>${e.type}</td>
+        <td class="right">${e.amount}</td>
+        <td></td>
+        <td></td>
+      </tr>
+    `;
+        })
+        .join("") || "";
+
+    // Deductions rows dynamic
+    const deductionsHtml =
+      salary.payroll?.deductions
+        ?.map((d) => {
+          return `
+      <tr>
+        <td></td>
+        <td></td>
+        <td>${d.type}</td>
+        <td class="right">${d.amount}</td>
+      </tr>
+    `;
+        })
+        .join("") || "";
 
     const data = {
       payPeriod: "",
@@ -260,17 +292,19 @@ exports.downloadReceipt = async (req, res) => {
       position: "Tutor",
       month,
       totalClasses: salary.payroll?.totalClasses || 0,
-      ratePerClass: 0,
-      baseSalary: salary.payroll?.baseSalary || salary.amount,
+      grossSalary: salary.payroll?.grossSalary || salary.amount,
       bonus: 0,
       lateDeduction: 0,
       leaveDeduction: 0,
       otherDeduction: 0,
-      totalDeductions: 0,
+      totalDeductions: salary.payroll?.totalDeductions,
+      totalEarnings: salary.totalEarnings,
       grossSalary: salary.payroll?.grossSalary || salary.amount,
       gstPercent: 0,
       gstAmount: 0,
       netPay: salary.payroll?.netSalary || salary.amount,
+      earningsHtml,
+      deductionsHtml,
     };
 
     const html = salarySlipTemplate(data);
@@ -415,7 +449,7 @@ exports.getNonAssignedTutorSalaries = async (req, res) => {
               totalClasses: salary.payroll.totalClasses,
               attendedClasses: salary.payroll.attendedClasses,
               missedClasses: salary.payroll.missedClasses,
-              baseSalary: salary.payroll.baseSalary,
+              grossSalary: salary.payroll.grossSalary,
               grossSalary: salary.payroll.grossSalary,
               netSalary: salary.payroll.netSalary,
             }
@@ -531,21 +565,15 @@ exports.getTutorSalarySummary = async (req, res) => {
 /* -----------------------------------------------------
    6. GET TUTOR SALARY BREAKDOWNS
 ----------------------------------------------------- */
-exports.getSalaryWithBreakdown = async (req, res) => {
+exports.getSalaryBreakdowns = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const salary = await TutorSalary.findOne({
-      where: { id: id },
-      include: [
-        {
-          model: TutorSalaryBreakdown,
-          as: "breakdowns",
-        },
-      ],
+    const breakdowns = await TutorSalaryBreakdown.findAll({
+      where: { salaryId: id },
     });
 
-    res.json({ success: true, data: salary });
+    res.json({ success: true, data: breakdowns });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

@@ -14,7 +14,7 @@ const CounselorPayroll = sequelizePrimary.define(
       allowNull: true,
     },
 
-    baseSalary: {
+    grossSalary: {
       type: DataTypes.FLOAT,
       allowNull: false,
       defaultValue: 0,
