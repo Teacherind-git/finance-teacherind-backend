@@ -508,7 +508,7 @@ const formatDate = (date) => {
 exports.markStudentBillPaid = async (req, res) => {
   try {
     const { id } = req.params;
-    const { paymentMode } = req.body;
+    const { paymentMode, paidAmount, dueAmount } = req.body;
 
     const bill = await StudentBill.findByPk(id);
 
@@ -518,6 +518,17 @@ exports.markStudentBillPaid = async (req, res) => {
         message: "Bill not found",
       });
     }
+
+    // Validate dueAmount
+    if (dueAmount < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Due amount cannot be negative",
+      });
+    }
+
+    // Set status based on dueAmount
+    const status = dueAmount === 0 ? "Paid" : "Partially Paid";
 
     // Generate payment number
     const lastPayment = await StudentBill.findOne({
@@ -533,22 +544,25 @@ exports.markStudentBillPaid = async (req, res) => {
     }
 
     const paymentNumber = `PAY-${String(nextNumber).padStart(5, "0")}`;
-
-    const paidAt = new Date(); // ✅ Backend current date
+    const paidAt = new Date();
 
     await bill.update({
-      status: "Paid",
+      status,
       paymentMode,
       paymentNumber,
       paymentDate: paidAt,
+      paidAmount,
+      dueAmount,
+      updatedBy: req.user?.id || null,
     });
 
     res.status(200).json({
       success: true,
-      message: "Bill marked as paid successfully",
+      message: `Bill marked as ${status} successfully`,
       data: {
         paymentNumber,
         paidAt,
+        status,
       },
     });
   } catch (error) {

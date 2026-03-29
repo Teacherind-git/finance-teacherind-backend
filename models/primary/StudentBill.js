@@ -24,6 +24,8 @@ const StudentBill = sequelizePrimary.define(
     paymentDate: { type: DataTypes.DATE, allowNull: true },
     paymentNumber: { type: DataTypes.STRING, allowNull: true },
     paymentMode: { type: DataTypes.STRING, allowNull: true },
+    paidAmount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+    dueAmount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
     createdBy: {
       type: DataTypes.INTEGER,
       allowNull: true,
