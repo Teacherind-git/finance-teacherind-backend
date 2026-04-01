@@ -1,46 +1,75 @@
 const cron = require("node-cron");
+const logger = require("./logger");
 
-// Import your scripts
-const generateBills = require("./utils/cronScripts/generateBills");
-const updateBillStatus = require("./utils/cronScripts/updateBillStatus");
+// Helper for timestamp
+const getTime = () => new Date().toLocaleString("en-IN", {
+  timeZone: "Asia/Kolkata",
+});
 
-const generateStaffSalary = require("./utils/cronScripts/generateStaffSalary");
-const updateStaffSalary = require("/utils/cronScripts/updateStaffSalary");
+// Import scripts
+const generateBills = require("./cronScripts/generateBills");
+const updateBillStatus = require("./cronScripts/updateBillStatus");
 
-const generateTutorSalary = require("./utils/cronScripts/generateTutorSalary");
-const updateTutorSalary = require("./utils/cronScripts/updateTutorSalary");
+const generateStaffSalary = require("./cronScripts/generateStaffSalary");
+const updateStaffSalary = require("./cronScripts/updateStaffSalary");
+
+const generateTutorSalary = require("./cronScripts/generateTutorSalary");
+const updateTutorSalary = require("./cronScripts/updateTutorSalary");
 
 /**
- * 🕛 DAILY JOBS (Every midnight)
- * Runs at 00:00
+ * 🕛 DAILY - Bills (Midnight)
  */
 cron.schedule("0 0 * * *", async () => {
-  console.log("Running daily bill jobs...");
-  await generateBills();
-  await updateBillStatus();
-});
+  const time = getTime();
+  try {
+    logger.info(`🧾 [${time}] Running daily bill cron...`);
+    await generateBills();
+    await updateBillStatus();
+    logger.info(`✅ [${time}] Bill cron completed`);
+  } catch (err) {
+    logger.error(`❌ [${time}] Bill cron failed`, err);
+  }
+}, { timezone: "Asia/Kolkata" });
 
 /**
- * 📅 MONTHLY JOBS
+ * 📅 8th - Generate Salaries
  */
-
-// 8th → Generate staff & tutor salary
 cron.schedule("0 0 8 * *", async () => {
-  console.log("Generating salaries (8th)...");
-  await generateStaffSalary();
-  await generateTutorSalary();
-});
+  const time = getTime();
+  try {
+    logger.info(`💰 [${time}] Generating salaries...`);
+    await generateStaffSalary();
+    await generateTutorSalary();
+    logger.info(`✅ [${time}] Salary generation done`);
+  } catch (err) {
+    logger.error(`❌ [${time}] Salary generation failed`, err);
+  }
+}, { timezone: "Asia/Kolkata" });
 
-// 9th → Update salaries
+/**
+ * 📅 9th - Update Salaries
+ */
 cron.schedule("0 0 9 * *", async () => {
-  console.log("Updating salaries (9th)...");
-  await updateStaffSalary();
-  await updateTutorSalary();
-});
+  const time = getTime();
+  try {
+    logger.info(`🔄 [${time}] Updating salaries (9th)...`);
+    await updateStaffSalary();
+    await updateTutorSalary();
+  } catch (err) {
+    logger.error(`❌ [${time}] Salary update failed`, err);
+  }
+}, { timezone: "Asia/Kolkata" });
 
-// 10th → Update salaries again (if needed)
+/**
+ * 📅 10th - Update Salaries again
+ */
 cron.schedule("0 0 10 * *", async () => {
-  console.log("Updating salaries (10th)...");
-  await updateStaffSalary();
-  await updateTutorSalary();
-});
+  const time = getTime();
+  try {
+    logger.info(`🔄 [${time}] Updating salaries (10th)...`);
+    await updateStaffSalary();
+    await updateTutorSalary();
+  } catch (err) {
+    logger.error(`❌ [${time}] Salary update failed`, err);
+  }
+}, { timezone: "Asia/Kolkata" });
