@@ -19,7 +19,7 @@ async function getAdminUser() {
   });
 
   if (!adminUser) {
-    throw new Error("❌ Admin user (roleId = 1) not found");
+    throw new Error("Admin user (roleId = 1) not found");
   }
 
   return adminUser;
@@ -29,22 +29,23 @@ async function getAdminUser() {
    MAIN CRON
 ========================== */
 async function updateSalaryStatus() {
-  try {
-    logger.info("🔄 Salary status update cron started");
+  logger.info("🔄 Staff Salary Status Update Cron Started");
 
+  try {
     const adminUser = await getAdminUser();
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Fetch all unpaid salaries
     const salaries = await StaffSalary.findAll({
       where: {
         isDeleted: false,
-        status: {
-          [Op.not]: "Paid",
-        },
+        status: { [Op.ne]: "Paid" },
       },
     });
+
+    logger.info(`📌 Salaries to process: ${salaries.length}`);
 
     for (const salary of salaries) {
       let newStatus = "Pending";
@@ -55,33 +56,39 @@ async function updateSalaryStatus() {
       dueDate.setHours(0, 0, 0, 0);
       finalDueDate.setHours(0, 0, 0, 0);
 
+      // Status logic
       if (today >= dueDate && today <= finalDueDate) {
         newStatus = "Due";
-      }
-
-      if (today > finalDueDate) {
+      } else if (today > finalDueDate) {
         newStatus = "Overdue";
       }
 
       if (salary.status !== newStatus) {
-        await salary.update({
-          status: newStatus,
-          updatedBy: adminUser.id, // ✅ added
-        });
+        await salary.update(
+          {
+            status: newStatus,
+            updatedBy: adminUser.id,
+          }
+        );
 
         logger.info(
-          `🔁 Salary status updated | id: ${salary.id}, newStatus: ${newStatus}`
+          `🔁 Status Updated | SalaryID: ${salary.id} | ${salary.status} → ${newStatus}`
         );
       }
     }
 
-    logger.info("🎉 Salary status update cron completed");
+    logger.info("🎉 Staff Salary Status Update Cron Completed");
+    process.exit(0);
   } catch (error) {
-    logger.error("❌ Salary status update cron failed", {
+    logger.error("❌ Staff Salary Status Update Cron Failed", {
       message: error.message,
       stack: error.stack,
     });
+    process.exit(1);
   }
 }
 
+/* ==========================
+   RUN CRON
+========================== */
 updateSalaryStatus();

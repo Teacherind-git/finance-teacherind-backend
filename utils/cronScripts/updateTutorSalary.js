@@ -11,7 +11,10 @@ const logger = require("../../utils/logger");
 ========================== */
 async function getAdminUser() {
   const user = await PrimaryUser.findOne({
-    where: { roleId: 1, isDeleted: false },
+    where: {
+      roleId: 1,
+      isDeleted: false,
+    },
     attributes: ["id"],
   });
 
@@ -23,21 +26,25 @@ async function getAdminUser() {
    MAIN CRON
 ========================== */
 async function updateTutorSalaryStatus() {
-  try {
-    logger.info("🔄 Tutor salary status cron started");
+  logger.info("🔄 Tutor Salary Status Update Cron Started");
 
+  try {
     const adminUser = await getAdminUser();
     const adminUserId = adminUser.id;
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // Fetch all unpaid tutor salaries
     const salaries = await TutorSalary.findAll({
       where: {
         type: "TUTOR",
-        status: { [Op.not]: "Paid" },
+        isDeleted: false,
+        status: { [Op.ne]: "Paid" },
       },
     });
+
+    logger.info(`📌 Tutor salaries to process: ${salaries.length}`);
 
     for (const salary of salaries) {
       let newStatus = "Pending";
@@ -48,14 +55,14 @@ async function updateTutorSalaryStatus() {
       dueDate.setHours(0, 0, 0, 0);
       finalDueDate.setHours(0, 0, 0, 0);
 
+      // Update status based on dates
       if (today >= dueDate && today <= finalDueDate) {
         newStatus = "Due";
-      }
-
-      if (today > finalDueDate) {
+      } else if (today > finalDueDate) {
         newStatus = "Overdue";
       }
 
+      // Only update if status changed
       if (salary.status !== newStatus) {
         await salary.update({
           status: newStatus,
@@ -63,18 +70,23 @@ async function updateTutorSalaryStatus() {
         });
 
         logger.info(
-          `🔁 TutorSalary updated | id:${salary.id} | status:${newStatus}`
+          `🔁 Status Updated | SalaryID: ${salary.id} | ${salary.status} → ${newStatus}`
         );
       }
     }
 
-    logger.info("🎉 Tutor salary status cron completed");
+    logger.info("🎉 Tutor Salary Status Update Cron Completed");
+    process.exit(0);
   } catch (error) {
-    logger.error("❌ Tutor salary status cron failed", {
+    logger.error("❌ Tutor Salary Status Update Cron Failed", {
       message: error.message,
       stack: error.stack,
     });
+    process.exit(1);
   }
 }
 
+/* ==========================
+   RUN CRON
+========================== */
 updateTutorSalaryStatus();

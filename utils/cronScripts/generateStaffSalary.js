@@ -5,15 +5,14 @@ const StaffSalary = require("../../models/primary/StaffSalary");
 const StaffPayroll = require("../../models/primary/StaffPayroll");
 const CounselorPayroll = require("../../models/primary/CounselorPayroll");
 const PrimaryUser = require("../../models/primary/User");
-const logger = require("../../utils/logger"); // ✅ central logger
+
+const cronLogger = require("../cronLogger"); // ✅ dedicated cron logger
 
 /* ==========================
    HELPERS
 ========================== */
 function getSalaryDatesFromPayrollMonth(payrollMonth) {
   const d = new Date(payrollMonth);
-
-  // move to next month
   const nextMonth = new Date(d.getFullYear(), d.getMonth() + 1, 1);
 
   return {
@@ -23,13 +22,10 @@ function getSalaryDatesFromPayrollMonth(payrollMonth) {
   };
 }
 
-// ✅ ADMIN USER (roleId = 1)
+// ADMIN USER (roleId = 1)
 async function getAdminUser() {
   const adminUser = await PrimaryUser.findOne({
-    where: {
-      roleId: 1,
-      isDeleted: false,
-    },
+    where: { roleId: 1, isDeleted: false },
     attributes: ["id"],
   });
 
@@ -45,19 +41,21 @@ async function getAdminUser() {
 ========================== */
 async function generateStaffSalary() {
   try {
-    logger.info("🔄 Staff & Counselor salary cron started");
+    cronLogger.info("🔄 Staff & Counselor salary cron started");
 
-    /* --------------------------
-       ADMIN USER
-    --------------------------- */
+    // ADMIN USER
     const adminUser = await getAdminUser();
-    logger.info(`🛠️ Cron executed by Admin ID: ${adminUser.id}`);
+    cronLogger.info("🛠 Cron executed by Admin", { adminId: adminUser.id });
 
-    // =========================
-    // STAFF PAYROLL
-    // =========================
+    /* ==========================
+       STAFF PAYROLL PROCESSING
+    =========================== */
     const staffPayrolls = await StaffPayroll.findAll({
       where: { isDeleted: false },
+    });
+
+    cronLogger.info("📌 Staff payrolls fetched", {
+      totalStaffPayrolls: staffPayrolls.length,
     });
 
     for (const payroll of staffPayrolls) {
@@ -72,7 +70,13 @@ async function generateStaffSalary() {
         },
       });
 
-      if (exists) continue;
+      if (exists) {
+        cronLogger.warn("⏭ Staff salary already exists — skipped", {
+          staffId: payroll.staffId,
+          payrollMonth: payroll.payrollMonth,
+        });
+        continue;
+      }
 
       await StaffSalary.create({
         staffPayrollId: payroll.id,
@@ -84,20 +88,25 @@ async function generateStaffSalary() {
         finalDueDate,
         type: "STAFF",
         status: "Pending",
-        createdBy: adminUser.id, // ✅ dynamic
+        createdBy: adminUser.id,
         updatedBy: adminUser.id,
       });
 
-      logger.info(
-        `🟢 Staff salary created | staffId: ${payroll.staffId}, month: ${payroll.payrollMonth}`,
-      );
+      cronLogger.info("🟢 Staff salary created", {
+        staffId: payroll.staffId,
+        month: payroll.payrollMonth,
+      });
     }
 
-    // =========================
-    // COUNSELOR PAYROLL
-    // =========================
+    /* ==========================
+       COUNSELOR PAYROLL PROCESSING
+    =========================== */
     const counselorPayrolls = await CounselorPayroll.findAll({
       where: { isDeleted: false },
+    });
+
+    cronLogger.info("📌 Counselor payrolls fetched", {
+      totalCounselorPayrolls: counselorPayrolls.length,
     });
 
     for (const payroll of counselorPayrolls) {
@@ -112,7 +121,13 @@ async function generateStaffSalary() {
         },
       });
 
-      if (exists) continue;
+      if (exists) {
+        cronLogger.warn("⏭ Counselor salary already exists — skipped", {
+          counselorId: payroll.counselorId,
+          payrollMonth: payroll.payrollMonth,
+        });
+        continue;
+      }
 
       await StaffSalary.create({
         counselorPayrollId: payroll.id,
@@ -124,18 +139,19 @@ async function generateStaffSalary() {
         finalDueDate,
         type: "COUNSELOR",
         status: "Pending",
-        createdBy: adminUser.id, // ✅ dynamic
+        createdBy: adminUser.id,
         updatedBy: adminUser.id,
       });
 
-      logger.info(
-        `🟢 Counselor salary created | counselorId: ${payroll.counselorId}, month: ${payroll.payrollMonth}`,
-      );
+      cronLogger.info("🟢 Counselor salary created", {
+        counselorId: payroll.counselorId,
+        month: payroll.payrollMonth,
+      });
     }
 
-    logger.info("🎉 Staff & Counselor salary cron completed");
+    cronLogger.info("🎉 Staff & Counselor salary cron completed successfully");
   } catch (error) {
-    logger.error("❌ Staff & Counselor salary cron failed", {
+    cronLogger.error("❌ Staff & Counselor salary cron failed", {
       message: error.message,
       sqlMessage: error?.parent?.sqlMessage,
       sqlCode: error?.parent?.code,

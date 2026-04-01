@@ -11,28 +11,19 @@ const StudentDetail = require("../../models/primary/StudentDetail");
 const StudentBill = require("../../models/primary/StudentBill");
 const PrimaryUser = require("../../models/primary/User");
 
-const logger = require("../logger");
+const cronLogger = require("../cronLogger");
 
-// ✅ Log to BOTH console + logger (cron-friendly)
-const logBoth = {
-  info: (msg, meta = {}) => {
-    logger.info(msg, meta);
-  },
-  warn: (msg, meta = {}) => {
-    logger.warn(msg, meta);
-  },
-  error: (msg, meta = {}) => {
-    logger.error(msg, meta);
-  },
+// Clean helper (NO console logs)
+const log = {
+  info: (msg, meta = {}) => cronLogger.info(msg, meta),
+  warn: (msg, meta = {}) => cronLogger.warn(msg, meta),
+  error: (msg, meta = {}) => cronLogger.error(msg, meta),
 };
 
-// ✅ ADMIN USER (roleId = 1)
+// Fetch Admin user
 async function getAdminUser() {
   const adminUser = await PrimaryUser.findOne({
-    where: {
-      roleId: 1,
-      isDeleted: false,
-    },
+    where: { roleId: 1, isDeleted: false },
     attributes: ["id"],
   });
 
@@ -43,18 +34,16 @@ async function getAdminUser() {
   return adminUser;
 }
 
+// Generate Invoice ID
 async function generateInvoiceId(transaction = null) {
   const year = moment().format("YYYY");
   const month = moment().format("MM");
 
   const prefix = `INV-${year}-${month}`;
 
-  // Find last invoice for this month
   const lastBill = await StudentBill.findOne({
     where: {
-      invoiceId: {
-        [Op.like]: `${prefix}-%`,
-      },
+      invoiceId: { [Op.like]: `${prefix}-%` },
     },
     order: [["createdAt", "DESC"]],
     transaction,
@@ -68,56 +57,38 @@ async function generateInvoiceId(transaction = null) {
     nextNumber = lastNumber + 1;
   }
 
-  const paddedNumber = String(nextNumber).padStart(3, "0");
-
-  return `${prefix}-${paddedNumber}`;
+  const padded = String(nextNumber).padStart(3, "0");
+  return `${prefix}-${padded}`;
 }
 
+// MAIN FUNCTION
 async function generateBills() {
   const startOfToday = moment().startOf("day");
   const endOfToday = moment().endOf("day");
 
-  logBoth.info("Student billing job started", {
+  log.info("🧾 Student billing cron started", {
     date: startOfToday.format("YYYY-MM-DD"),
   });
 
-  /* --------------------------
-       ADMIN USER
-    --------------------------- */
-  const adminUser = await getAdminUser();
-  logger.info(`🛠️ Cron executed by Admin ID: ${adminUser.id}`);
-
   try {
+    const adminUser = await getAdminUser();
+    log.info("🛠 Cron executed by Admin", { adminId: adminUser.id });
+
     const students = await Student.findAll({
       include: [
-        {
-          model: StudentDetail,
-          as: "details",
-          required: true,
-        },
+        { model: StudentDetail, as: "details", required: true },
         {
           model: StudentBill,
           as: "bills",
-          required: false, // allow students with no bills
-          where: {
-            status: { [Op.ne]: "Generated" }, // optional: only consider bills not generated
-          },
+          required: false,
         },
       ],
     });
 
-    logBoth.info("Students fetched for billing", {
-      count: students.length,
-    });
+    log.info("Students fetched", { totalStudents: students.length });
 
     for (const student of students) {
-      if (student.bills && student.bills.length > 0) {
-        logBoth.warn("Billing skipped – student already has a bill", {
-          studentId: student.id,
-        });
-        continue;
-      }
-
+      // Skip if already billed today
       const existingBill = await StudentBill.findOne({
         where: {
           studentId: student.id,
@@ -128,12 +99,11 @@ async function generateBills() {
       });
 
       if (existingBill) {
-        logBoth.warn("Billing skipped – already billed today", {
-          studentId: student.id,
-        });
+        log.warn("Skipping — already billed today", { studentId: student.id });
         continue;
       }
 
+      // Total Amount
       let totalAmount = 0;
       let earliestStartDate = null;
 
@@ -151,9 +121,7 @@ async function generateBills() {
       }
 
       if (totalAmount <= 0) {
-        logBoth.warn("Billing skipped – amount is zero", {
-          studentId: student.id,
-        });
+        log.warn("Skipping — amount is zero", { studentId: student.id });
         continue;
       }
 
@@ -164,9 +132,7 @@ async function generateBills() {
         studentId: student.id,
         amount: totalAmount,
         billDate: moment().toDate(),
-        dueDate: earliestStartDate
-          ? moment(earliestStartDate).toDate()
-          : moment().toDate(),
+        dueDate: earliestStartDate || moment().toDate(),
         finalDueDate: earliestStartDate
           ? moment(earliestStartDate)
               .add(parseInt(process.env.FINAL_DUE_MINUTES || "60"), "minutes")
@@ -179,17 +145,17 @@ async function generateBills() {
         updatedBy: adminUser.id,
       });
 
-      logBoth.info("Bill generated successfully", {
+      log.info("Bill generated", {
         studentId: student.id,
         amount: totalAmount,
         invoiceId,
       });
     }
 
-    logBoth.info("Student billing job completed successfully");
+    log.info("🎉 Billing cron completed successfully");
     process.exit(0);
   } catch (error) {
-    logBoth.error("Student billing job failed", {
+    log.error("❌ Billing cron failed", {
       message: error.message,
       stack: error.stack,
     });

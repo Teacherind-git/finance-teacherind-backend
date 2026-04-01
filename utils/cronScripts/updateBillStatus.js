@@ -1,27 +1,24 @@
 const moment = require("moment");
 const { Op } = require("sequelize");
-
 const StudentBill = require("../../models/primary/StudentBill");
 const logger = require("../logger");
 
 /* ==========================
-   LOGGER
+   CLEAN LOGGER WRAPPER
 ========================== */
-const logBoth = {
+const log = {
   info: (msg, meta = {}) => logger.info(msg, meta),
   warn: (msg, meta = {}) => logger.warn(msg, meta),
   error: (msg, meta = {}) => logger.error(msg, meta),
 };
 
 /* ==========================
-   UPDATE BILL STATUS
+   MAIN CRON FUNCTION
 ========================== */
 async function updateBillStatuses() {
   const now = moment().toDate();
 
-  logBoth.info("Student bill status update started", {
-    time: moment().format("YYYY-MM-DD HH:mm:ss"),
-  });
+  log.info("🔄 Student Bill Status Update Cron Started");
 
   try {
     /* --------------------------
@@ -32,9 +29,7 @@ async function updateBillStatuses() {
       {
         where: {
           status: "Generated",
-          dueDate: {
-            [Op.lte]: now,
-          },
+          dueDate: { [Op.lte]: now },
           isDeleted: false,
         },
       }
@@ -48,24 +43,21 @@ async function updateBillStatuses() {
       {
         where: {
           status: "Due",
-          finalDueDate: {
-            [Op.lte]: now,
-          },
+          finalDueDate: { [Op.lte]: now },
           isDeleted: false,
         },
       }
     );
 
-    logBoth.info("Student bill status update completed", {
-      dueUpdated,
-      overdueUpdated,
+    log.info("✔️ Student Bill Status Update Completed", {
+      generatedToDue: dueUpdated,
+      dueToOverdue: overdueUpdated,
     });
 
     process.exit(0);
   } catch (error) {
-    logBoth.error("Student bill status update failed", {
+    log.error("❌ Student Bill Status Update Failed", {
       message: error.message,
-      stack: error.stack,
     });
 
     process.exit(1);
