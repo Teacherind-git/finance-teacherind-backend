@@ -80,10 +80,6 @@ const PORT = process.env.PORT || 5000;
     await connectDBs();
     logger.info("✅ Database connection established");
 
-    // ✅ START CRON JOBS HERE
-    require("./utils/cron");
-    logger.info("✅ Cron job started");
-
     // 2️⃣ Sync models
     if (process.env.DB_SYNC === "true") {
       await sequelizePrimary.sync({ alter: true });
@@ -91,6 +87,10 @@ const PORT = process.env.PORT || 5000;
     } else {
       logger.info("⏭️ DB sync skipped");
     }
+
+    // ✅ START CRON JOBS HERE
+    require("./utils/cron");
+    logger.info("✅ Cron job started");
 
     // 3️⃣ Start server
     app.listen(PORT, () => {
