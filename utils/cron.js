@@ -1,21 +1,42 @@
 const cron = require("node-cron");
 const logger = require("./cronLogger");
 
-// Helper for timestamp
+// Timestamp helper
 const getTime = () =>
   new Date().toLocaleString("en-IN", {
     timeZone: "Asia/Kolkata",
   });
 
-// Import scripts
-const generateBills = require("./cronScripts/generateBills");
-const updateBillStatus = require("./cronScripts/updateBillStatus");
+// Delay helper
+const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
-const generateStaffSalary = require("./cronScripts/generateStaffSalary");
-const updateStaffSalary = require("./cronScripts/updateStaffSalary");
+/**
+ * ✅ Safe runner with:
+ * - try/catch
+ * - timeout protection
+ * - logging
+ */
+const safeRun = async (fn, name, timeoutMs = 60000) => {
+  const time = getTime();
 
-const generateTutorSalary = require("./cronScripts/generateTutorSalary");
-const updateTutorSalary = require("./cronScripts/updateTutorSalary");
+  try {
+    logger.info(`➡️ [${time}] Starting ${name}`);
+
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${name} timeout`)), timeoutMs)
+    );
+
+    await Promise.race([fn(), timeout]);
+
+    logger.info(`✅ [${time}] Completed ${name}`);
+  } catch (err) {
+    logger.error(`❌ [${time}] Error in ${name}: ${err.message}`);
+  }
+};
+
+cron.schedule("0 * * * *", () => {
+  console.log("🔥 Cron is working:", new Date().toLocaleString());
+});
 
 /**
  * 🕛 DAILY - Bills (Midnight)
@@ -24,16 +45,24 @@ cron.schedule(
   "0 0 * * *",
   async () => {
     const time = getTime();
+
     try {
       logger.info(`🧾 [${time}] Running daily bill cron...`);
-      await generateBills();
-      await updateBillStatus();
+
+      // Lazy load (prevents startup crash)
+      const generateBills = require("./cronScripts/generateBills");
+      const updateBillStatus = require("./cronScripts/updateBillStatus");
+
+      await safeRun(generateBills, "generateBills");
+      await delay(3000); // prevent DB overload
+      await safeRun(updateBillStatus, "updateBillStatus");
+
       logger.info(`✅ [${time}] Bill cron completed`);
     } catch (err) {
       logger.error(`❌ [${time}] Bill cron failed`, err);
     }
   },
-  { timezone: "Asia/Kolkata" },
+  { timezone: "Asia/Kolkata" }
 );
 
 /**
@@ -43,16 +72,23 @@ cron.schedule(
   "0 0 8 * *",
   async () => {
     const time = getTime();
+
     try {
       logger.info(`💰 [${time}] Generating salaries...`);
-      await generateStaffSalary();
-      await generateTutorSalary();
+
+      const generateStaffSalary = require("./cronScripts/generateStaffSalary");
+      const generateTutorSalary = require("./cronScripts/generateTutorSalary");
+
+      await safeRun(generateStaffSalary, "generateStaffSalary");
+      await delay(3000);
+      await safeRun(generateTutorSalary, "generateTutorSalary");
+
       logger.info(`✅ [${time}] Salary generation done`);
     } catch (err) {
       logger.error(`❌ [${time}] Salary generation failed`, err);
     }
   },
-  { timezone: "Asia/Kolkata" },
+  { timezone: "Asia/Kolkata" }
 );
 
 /**
@@ -62,15 +98,21 @@ cron.schedule(
   "0 0 9 * *",
   async () => {
     const time = getTime();
+
     try {
       logger.info(`🔄 [${time}] Updating salaries (9th)...`);
-      await updateStaffSalary();
-      await updateTutorSalary();
+
+      const updateStaffSalary = require("./cronScripts/updateStaffSalary");
+      const updateTutorSalary = require("./cronScripts/updateTutorSalary");
+
+      await safeRun(updateStaffSalary, "updateStaffSalary");
+      await delay(3000);
+      await safeRun(updateTutorSalary, "updateTutorSalary");
     } catch (err) {
       logger.error(`❌ [${time}] Salary update failed`, err);
     }
   },
-  { timezone: "Asia/Kolkata" },
+  { timezone: "Asia/Kolkata" }
 );
 
 /**
@@ -80,13 +122,30 @@ cron.schedule(
   "0 0 10 * *",
   async () => {
     const time = getTime();
+
     try {
       logger.info(`🔄 [${time}] Updating salaries (10th)...`);
-      await updateStaffSalary();
-      await updateTutorSalary();
+
+      const updateStaffSalary = require("./cronScripts/updateStaffSalary");
+      const updateTutorSalary = require("./cronScripts/updateTutorSalary");
+
+      await safeRun(updateStaffSalary, "updateStaffSalary");
+      await delay(3000);
+      await safeRun(updateTutorSalary, "updateTutorSalary");
     } catch (err) {
       logger.error(`❌ [${time}] Salary update failed`, err);
     }
   },
-  { timezone: "Asia/Kolkata" },
+  { timezone: "Asia/Kolkata" }
 );
+
+/**
+ * 🛑 Global crash protection (VERY IMPORTANT)
+ */
+process.on("uncaughtException", (err) => {
+  logger.error("❌ Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (err) => {
+  logger.error("❌ Unhandled Rejection:", err);
+});
