@@ -72,6 +72,7 @@ exports.saveTutorPayroll = async (req, res) => {
         {
           remark,
           employeeCode,
+          payrollMonth,
           updatedBy: req.user?.id || 10,
         },
         { transaction },

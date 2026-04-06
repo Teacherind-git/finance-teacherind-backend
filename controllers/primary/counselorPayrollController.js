@@ -296,16 +296,16 @@ exports.updateCounselorPayroll = async (req, res) => {
       payrollMonth: payload.payrollMonth,
       baseSalary: payload.baseSalary,
       grossSalary: payload.grossSalary,
-
       earnings: payload.earnings || [],
       totalEarnings: payload.totalEarnings || 0,
-
       deductions: payload.deductions || [],
       totalDeductions: payload.totalDeductions || 0,
-
       netSalary: payload.netSalary,
       updatedBy: payload.userId,
     });
+
+    // 🔥 IMPORTANT — refresh updated model values
+    await payroll.reload();
 
     await PayrollAudit.create({
       payrollId: payroll.id,
@@ -313,7 +313,7 @@ exports.updateCounselorPayroll = async (req, res) => {
       staffType: "COUNSELOR",
       action: "UPDATE",
       oldData,
-      newData: payroll.toJSON(),
+      newData: payroll.toJSON(), // now contains UPDATED values
       changedFields,
       changedBy: req.user?.id,
     });
