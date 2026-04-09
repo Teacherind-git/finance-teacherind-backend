@@ -34,6 +34,33 @@ exports.getAllTutorSalaries = async (req, res) => {
     }
 
     /* ===============================
+   PAYROLL MONTH DATE RANGE FILTER
+=============================== */
+
+    const { startMonth, endMonth } = req.query;
+
+    if (startMonth || endMonth) {
+      const dateRange = {};
+
+      // Start of selected month
+      if (startMonth) {
+        dateRange[Op.gte] = new Date(`${startMonth}-01T00:00:00`);
+      }
+
+      // End of selected month
+      if (endMonth) {
+        const endDate = new Date(`${endMonth}-01T00:00:00`);
+        endDate.setMonth(endDate.getMonth() + 1); // go to next month
+        endDate.setDate(0); // step back → last day of month
+        endDate.setHours(23, 59, 59, 999); // full day end
+
+        dateRange[Op.lte] = endDate;
+      }
+
+      whereCondition.payrollMonth = dateRange;
+    }
+
+    /* ===============================
        SEARCH TUTORS
     =============================== */
 
