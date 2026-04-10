@@ -8,6 +8,7 @@ const { getPaginationParams } = require("../../../utils/pagination");
 const puppeteer = require("puppeteer");
 const salarySlipTemplate = require("../../../templates/staffSalarySlipTemplate");
 const logger = require("../../../utils/logger"); // ✅ central logger
+const { parseList } = require("../../../utils/arrayFunction");
 
 // -----------------------------------------------------
 // 1. GET ALL SALARIES
@@ -193,8 +194,8 @@ exports.getAllSalaries = async (req, res) => {
           id: salary.staffPayroll.id,
           grossSalary: salary.staffPayroll.grossSalary,
           netSalary: salary.staffPayroll.netSalary,
-          earnings: salary.staffPayroll.earnings || [],
-          deductions: salary.staffPayroll.deductions || [],
+          earnings: parseList(salary.staffPayroll.earnings),
+          deductions: parseList(salary.staffPayroll.deductions),
           totalEarnings: salary.staffPayroll.totalEarnings,
           totalDeductions: salary.staffPayroll.totalDeductions,
         };
@@ -205,8 +206,8 @@ exports.getAllSalaries = async (req, res) => {
           id: salary.counselorPayroll.id,
           grossSalary: salary.counselorPayroll.grossSalary,
           netSalary: salary.counselorPayroll.netSalary,
-          earnings: salary.counselorPayroll.earnings || [],
-          deductions: salary.counselorPayroll.deductions || [],
+          earnings: parseList(salary.counselorPayroll.earnings),
+          deductions: parseList(salary.counselorPayroll.deductions),
           totalEarnings: salary.counselorPayroll.totalEarnings,
           totalDeductions: salary.counselorPayroll.totalDeductions,
         };

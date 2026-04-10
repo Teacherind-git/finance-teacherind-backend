@@ -7,6 +7,7 @@ const { Op } = require("sequelize");
 const puppeteer = require("puppeteer");
 const salarySlipTemplate = require("../../../templates/tutorSalarySlipTemplate");
 const logger = require("../../../utils/logger"); // ✅ central logger
+const { parseList } = require("../../../utils/arrayFunction");
 
 /* -----------------------------------------------------
    1. GET ALL TUTOR SALARIES
@@ -172,10 +173,12 @@ exports.getAllTutorSalaries = async (req, res) => {
             attendedClasses: salary.payroll.attendedClasses,
             missedClasses: salary.payroll.missedClasses,
             grossSalary: salary.payroll.grossSalary,
-            grossSalary: salary.payroll.grossSalary,
             netSalary: salary.payroll.netSalary,
-            deductions: salary.payroll.deductions || [],
-            earnings: salary.payroll.earnings || [],
+
+            // FIXED — always array
+            deductions: parseList(salary.payroll.deductions),
+            earnings: parseList(salary.payroll.earnings),
+
             totalDeductions: salary.payroll.totalDeductions,
             totalEarnings: salary.payroll.totalEarnings,
           }
