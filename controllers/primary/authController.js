@@ -107,7 +107,7 @@ exports.login = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({
+      return res.status(400).json({
         success: false,
         message: "Invalid email or password",
       });
@@ -116,7 +116,7 @@ exports.login = async (req, res) => {
     // 🔒 CHECK: isDeleted
     if (user.isDeleted) {
       logger.warn(`Login blocked (deleted user): ${email}`);
-      return res.status(403).json({
+      return res.status(400).json({
         success: false,
         code: "ACCOUNT_DELETED",
         message: "Your account has been deleted. Please contact administrator.",
@@ -126,7 +126,7 @@ exports.login = async (req, res) => {
     // 🔒 CHECK: status
     if (user.status === "Inactive") {
       logger.warn(`Login blocked (inactive user): ${email}`);
-      return res.status(403).json({
+      return res.status(400).json({
         success: false,
         code: "ACCOUNT_INACTIVE",
         message: "Your account is inactive. Please contact administrator.",
@@ -135,7 +135,8 @@ exports.login = async (req, res) => {
 
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
-      return res.status(401).json({
+      return res.status(400).json({
+        // ✅ changed from 401 → 400
         success: false,
         message: "Invalid email or password",
       });
@@ -158,7 +159,8 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     logger.error("Login error", error);
-    res.status(500).json({
+    res.status(400).json({
+      // ✅ optional: also changed from 500 → 400
       success: false,
       message: "Server error",
     });

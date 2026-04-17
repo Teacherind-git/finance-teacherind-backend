@@ -3,7 +3,7 @@
 ========================== */
 const { Op } = require("sequelize");
 const { sequelizePrimary } = require("../../config/db");
-const logger = require("../../utils/logger");
+const logger = require("../../utils/cronLogger");
 
 // ===== PRIMARY DB =====
 const TutorSalary = require("../../models/primary/TutorSalary");

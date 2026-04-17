@@ -4,7 +4,7 @@
 const { Op } = require("sequelize");
 const StaffSalary = require("../../models/primary/StaffSalary");
 const PrimaryUser = require("../../models/primary/User");
-const logger = require("../../utils/logger");
+const logger = require("../../utils/cronLogger");
 
 /* ==========================
    ADMIN USER
