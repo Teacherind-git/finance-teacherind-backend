@@ -66,10 +66,10 @@ cron.schedule(
 );
 
 /**
- * 📅 8th - Generate Salaries
+ * 📅 7th - Generate Salaries
  */
 cron.schedule(
-  "0 0 8 * *",
+  "0 0 7 * *",
   async () => {
     const time = getTime();
 
@@ -92,10 +92,10 @@ cron.schedule(
 );
 
 /**
- * 📅 9th - Update Salaries
+ * 📅 8th - Update Salaries
  */
 cron.schedule(
-  "0 0 9 * *",
+  "0 0 8 * *",
   async () => {
     const time = getTime();
 
@@ -116,10 +116,10 @@ cron.schedule(
 );
 
 /**
- * 📅 10th - Update Salaries again
+ * 📅 9th - Update Salaries again
  */
 cron.schedule(
-  "0 0 10 * *",
+  "0 0 9 * *",
   async () => {
     const time = getTime();
 
