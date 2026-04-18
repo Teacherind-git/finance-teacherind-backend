@@ -189,6 +189,7 @@ exports.updateUser = async (req, res) => {
       taxId,
       address,
       status,
+      password,
     } = req.body;
 
     logger.info("Updating user", {
@@ -224,6 +225,10 @@ exports.updateUser = async (req, res) => {
 
     if (address) {
       user.address = { ...user.address, ...address };
+    }
+
+    if (password) {
+      user.password = password;
     }
 
     user.updatedBy = req.user.id;
