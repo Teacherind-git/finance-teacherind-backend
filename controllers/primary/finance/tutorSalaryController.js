@@ -8,6 +8,7 @@ const puppeteer = require("puppeteer");
 const salarySlipTemplate = require("../../../templates/tutorSalarySlipTemplate");
 const logger = require("../../../utils/logger"); // ✅ central logger
 const { parseList } = require("../../../utils/arrayFunction");
+const { fn, col, literal } = require("sequelize");
 
 /* -----------------------------------------------------
    1. GET ALL TUTOR SALARIES
@@ -297,12 +298,18 @@ exports.downloadReceipt = async (req, res) => {
       : typeof salary.payroll?.earnings === "string"
         ? JSON.parse(salary.payroll.earnings || "[]")
         : [];
-
     const earningsHtml = earningsArr
       .map((e) => {
         return `
       <tr>
-        <td>${e.type}</td>
+        <td>
+          ${e.type}
+          ${
+            e.description
+              ? ` <span style="color:#666;">(${e.description})</span>`
+              : ""
+          }
+        </td>
         <td class="right">${e.amount}</td>
         <td></td>
         <td></td>
@@ -323,7 +330,14 @@ exports.downloadReceipt = async (req, res) => {
       <tr>
         <td></td>
         <td></td>
-        <td>${d.type}</td>
+        <td>
+          ${d.type}
+          ${
+            d.description
+              ? ` <span style="color:#666;">(${d.description})</span>`
+              : ""
+          }
+        </td>
         <td class="right">${d.amount}</td>
       </tr>`;
       })
@@ -642,16 +656,55 @@ exports.getTutorSalarySummary = async (req, res) => {
 /* -----------------------------------------------------
    6. GET TUTOR SALARY BREAKDOWNS
 ----------------------------------------------------- */
+
 exports.getSalaryBreakdowns = async (req, res) => {
   try {
     const { id } = req.params;
 
     const breakdowns = await TutorSalaryBreakdown.findAll({
-      where: { salaryId: id },
+      where: {
+        salaryId: id,
+        isDeleted: false,
+      },
+
+      attributes: [
+        // unique frontend key
+        [fn("MIN", col("id")), "id"],
+
+        "classNumber",
+        "syllabusName",
+        "studentName",
+        "duration",
+        "basePay",
+
+        [fn("SUM", col("classUnits")), "classUnits"],
+        [fn("SUM", col("amount")), "amount"],
+      ],
+
+      group: [
+        "classNumber",
+        "syllabusName",
+        "studentName",
+        "duration",
+        "basePay",
+      ],
+
+      order: [
+        ["classNumber", "ASC"],
+        ["studentName", "ASC"],
+      ],
+
+      raw: true,
     });
 
-    res.json({ success: true, data: breakdowns });
+    res.json({
+      success: true,
+      data: breakdowns,
+    });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };

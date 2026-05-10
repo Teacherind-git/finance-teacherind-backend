@@ -344,19 +344,24 @@ exports.downloadReceipt = async (req, res) => {
           : [];
 
     // Earnings rows dynamic
-    const earningsHtml =
-      earningsArr
-        .map((e) => {
-          return `
-        <tr>
-          <td>${e.type || ""}</td>
-          <td class="right">${e.amount || 0}</td>
-          <td></td>
-          <td></td>
-        </tr>
-      `;
-        })
-        .join("") || "";
+    const earningsHtml = earningsArr
+      .map((e) => {
+        return `
+      <tr>
+        <td>
+          ${e.type}
+          ${
+            e.description
+              ? ` <span style="color:#666;">(${e.description})</span>`
+              : ""
+          }
+        </td>
+        <td class="right">${e.amount}</td>
+        <td></td>
+        <td></td>
+      </tr>`;
+      })
+      .join("");
 
     // Normalize deductions into an array
     const deductionsArr = Array.isArray(payroll?.deductions)
@@ -368,19 +373,24 @@ exports.downloadReceipt = async (req, res) => {
           : [];
 
     // Deductions rows dynamic
-    const deductionsHtml =
-      deductionsArr
-        .map((d) => {
-          return `
-        <tr>
-          <td></td>
-          <td></td>
-          <td>${d.type || ""}</td>
-          <td class="right">${d.amount || 0}</td>
-        </tr>
-      `;
-        })
-        .join("") || "";
+    const deductionsHtml = deductionsArr
+      .map((d) => {
+        return `
+      <tr>
+        <td></td>
+        <td></td>
+        <td>
+          ${d.type}
+          ${
+            d.description
+              ? ` <span style="color:#666;">(${d.description})</span>`
+              : ""
+          }
+        </td>
+        <td class="right">${d.amount}</td>
+      </tr>`;
+      })
+      .join("");
 
     const data = {
       payPeriod: `${formatDate(start)} to ${formatDate(end)}`,
