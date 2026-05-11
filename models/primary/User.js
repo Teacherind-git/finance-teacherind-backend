@@ -85,6 +85,16 @@ const User = sequelizePrimary.define(
       allowNull: false,
       defaultValue: false,
     },
+    
+    resetPasswordToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    resetPasswordExpire: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
 
     createdBy: {
       type: DataTypes.INTEGER,
@@ -121,7 +131,7 @@ const User = sequelizePrimary.define(
         }
       },
     },
-  }
+  },
 );
 
 // Instance method: compare password

@@ -9,6 +9,7 @@ const StaffPayroll = require("../../models/primary/StaffPayroll");
 const logger = require("../../utils/logger");
 const SecondaryUser = require("../../models/secondary/User");
 const { getPaginationParams } = require("../../utils/pagination");
+const Tutor = require("../../models/primary/Tutor");
 
 /* ================= CREATE STAFF (STEP 1) ================= */
 exports.createStaff = async (req, res) => {
@@ -190,7 +191,10 @@ exports.getStaff = async (req, res) => {
     return res.status(404).json({ message: "Not found" });
   }
 
-  res.json(staff);
+  return res.status(200).json({
+    success: true,
+    data: staff,
+  });
 };
 
 /* ================= DELETE STAFF ================= */
@@ -528,8 +532,8 @@ exports.getStaffSummary = async (req, res) => {
         }),
 
         // Total tutors (secondary DB)
-        SecondaryUser.count({
-          where: { role: 3 },
+        Tutor.count({
+          where: { isDeleted: false },
         }),
 
         // Total counselors (secondary DB)

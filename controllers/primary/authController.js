@@ -2,6 +2,8 @@ const User = require("../../models/primary/User");
 const Role = require("../../models/primary/Role");
 const jwt = require("jsonwebtoken");
 const logger = require("../../utils/logger");
+const crypto = require("crypto");
+const sendMail = require("../../utils/sendMail");
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: "1d" });
@@ -186,6 +188,139 @@ exports.getAllRoles = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to fetch roles",
+    });
+  }
+};
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    logger.info(`Forgot password request: ${email}`);
+
+    const user = await User.findOne({
+      where: { email },
+    });
+
+    // SECURITY:
+    // don't reveal if user exists
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message: "If account exists, reset email sent",
+      });
+    }
+
+    // GENERATE TOKEN
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    // HASH TOKEN
+    const hashedToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+    // SAVE TOKEN
+    user.resetPasswordToken = hashedToken;
+
+    user.resetPasswordExpire = Date.now() + 15 * 60 * 1000;
+
+    await user.save();
+
+    // RESET URL
+    const resetUrl =
+      `${process.env.FRONTEND_URL}` + `/reset-password?token=${resetToken}`;
+
+    // SEND EMAIL
+    await sendMail(
+      user.email,
+      "Reset Password",
+      `
+      <div style="font-family:sans-serif">
+        <h2>Reset Password</h2>
+
+        <p>
+          Click the link below to reset your password:
+        </p>
+
+        <a href="${resetUrl}">
+          ${resetUrl}
+        </a>
+
+        <p>
+          This link expires in 15 minutes.
+        </p>
+      </div>
+      `,
+    );
+
+    logger.info(`Reset password email sent: ${email}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Reset email sent",
+    });
+  } catch (error) {
+    logger.error("Forgot password error", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    logger.info("Reset password attempt");
+
+    // HASH TOKEN
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    const user = await User.findOne({
+      where: {
+        resetPasswordToken: hashedToken,
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired token",
+      });
+    }
+
+    // CHECK EXPIRY
+    if (new Date(user.resetPasswordExpire) < new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "Reset token expired",
+      });
+    }
+
+    // UPDATE PASSWORD
+    user.password = password;
+
+    // CLEAR TOKEN
+    user.resetPasswordToken = null;
+
+    user.resetPasswordExpire = null;
+
+    await user.save();
+
+    logger.info(`Password reset successful: ${user.email}`);
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successful",
+    });
+  } catch (error) {
+    logger.error("Reset password error", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
     });
   }
 };

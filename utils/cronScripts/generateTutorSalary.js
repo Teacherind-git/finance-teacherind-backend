@@ -80,12 +80,12 @@ async function generateTutorSalary() {
     const startDate = new Date(
       payrollMonth.getFullYear(),
       payrollMonth.getMonth(),
-      1
+      1,
     );
     const endDate = new Date(
       payrollMonth.getFullYear(),
       payrollMonth.getMonth() + 1,
-      0
+      0,
     );
 
     logger.info(`📅 Payroll Month: ${dateStr(payrollMonth)}`);
@@ -207,19 +207,43 @@ async function generateTutorSalary() {
 
         if (!payrollItem) continue;
 
+        // Default full pay
+        let calculatedAmount = payrollItem.basePay;
+        let classUnits = 1;
+
+        // Half pay for 30 min classes
+        if (Number(sc.duration) === 30) {
+          calculatedAmount = payrollItem.basePay / 2;
+          classUnits = 0.5;
+        }
+
+        // Full pay for 60 min classes
+        if (Number(sc.duration) === 60) {
+          calculatedAmount = payrollItem.basePay;
+          classUnits = 1;
+        }
+
         attendedCount++;
 
-        totalBasePay += payrollItem.basePay;
+        totalBasePay += calculatedAmount;
 
         breakdownRows.push({
           tutorId,
           classNumber: secClass.classnumber,
           syllabusName: secClass.syllabusname,
           studentName: student?.name || null,
+
+          // original rate
           basePay: payrollItem.basePay,
+
           duration: sc.duration,
-          classUnits: 1,
-          amount: payrollItem.basePay,
+
+          // 1 for 60 mins, 0.5 for 30 mins
+          classUnits,
+
+          // actual earned amount
+          amount: calculatedAmount,
+
           status: sc.status,
           createdBy: adminUserId,
           updatedBy: adminUserId,
@@ -273,7 +297,7 @@ async function generateTutorSalary() {
               createdBy: adminUserId,
               updatedBy: adminUserId,
             },
-            { transaction: t }
+            { transaction: t },
           );
         } else {
           await payroll.update(
@@ -287,7 +311,7 @@ async function generateTutorSalary() {
               totalDeductions: deductionAmount,
               updatedBy: adminUserId,
             },
-            { transaction: t }
+            { transaction: t },
           );
         }
 
@@ -317,7 +341,7 @@ async function generateTutorSalary() {
               createdBy: adminUserId,
               updatedBy: adminUserId,
             },
-            { transaction: t }
+            { transaction: t },
           );
         } else {
           await salary.update(
@@ -328,7 +352,7 @@ async function generateTutorSalary() {
               finalDueDate,
               updatedBy: adminUserId,
             },
-            { transaction: t }
+            { transaction: t },
           );
         }
 
@@ -343,13 +367,13 @@ async function generateTutorSalary() {
             salaryId: salary.id,
             payrollId: payroll.id,
           })),
-          { transaction: t }
+          { transaction: t },
         );
 
         await t.commit();
 
         logger.info(
-          `✔️ Salary Generated | Tutor:${tutorId} | Amount:${netSalary}`
+          `✔️ Salary Generated | Tutor:${tutorId} | Amount:${netSalary}`,
         );
       } catch (err) {
         await t.rollback();
