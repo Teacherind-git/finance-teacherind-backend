@@ -11,6 +11,7 @@ const {
   getTutorById,
   updateTutor,
   deleteTutor,
+  uploadDocuments
 } = require("../../controllers/primary/tutorController");
 
 // ======================================================
@@ -34,6 +35,13 @@ router.delete(
   "/:id",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   deleteTutor,
+);
+
+router.post(
+  "/:id/documents",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  upload.fields([{ name: "documents", maxCount: 10 }]),
+  uploadDocuments,
 );
 
 module.exports = router;

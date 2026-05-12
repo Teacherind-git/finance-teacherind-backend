@@ -341,6 +341,8 @@ exports.getAllStaff = async (req, res) => {
 
       return {
         ...u.toJSON(),
+        userId: u.id,
+        id: null, // optional: avoid conflict with staff id
         fullName: `${u.firstName} ${u.lastName}`,
         roleName: u.role?.name || "",
         documents: [],

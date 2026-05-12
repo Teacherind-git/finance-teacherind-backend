@@ -1,9 +1,10 @@
 const Tutor = require("../../models/primary/Tutor");
 const User = require("../../models/primary/User");
+const TutorDocument = require("../../models/primary/TutorDocument");
 const logger = require("../../utils/logger");
 const { getPaginationParams } = require("../../utils/pagination");
 const { Op } = require("sequelize");
-
+const axios = require("axios");
 
 // ======================================================
 // CREATE TUTOR
@@ -16,25 +17,77 @@ exports.createTutor = async (req, res) => {
       userId: req.user?.id,
     });
 
+    const data = {
+      ...req.body,
+      createdBy: req.user?.id || null,
+    };
+
     // ✅ Profile photo upload
     if (req.files?.profilePhoto) {
       data.profilePhoto = `/uploads/profile/${req.files.profilePhoto[0].filename}`;
     }
 
-    const tutor = await Tutor.create({
-      ...req.body,
-      createdBy: req.user?.id || null,
-    });
+    // ======================================================
+    // 1. CREATE IN PRIMARY DB FIRST
+    // ======================================================
+    const tutor = await Tutor.create(data);
 
-    logger.info("Tutor created successfully", {
+    logger.info("Tutor created in primary DB", {
       tutorId: tutor.id,
     });
 
-    return res.status(201).json({
+    // ======================================================
+    // 2. SEND RESPONSE TO CLIENT
+    // ======================================================
+    res.status(201).json({
       success: true,
       message: "Tutor created successfully",
       data: tutor,
     });
+
+    // ======================================================
+    // 3. AFTER PRIMARY SUCCESS → CALL SECONDARY API
+    // ======================================================
+    try {
+      const payload = {
+        email: tutor.email,
+        fullname: tutor.fullName,
+        phone: tutor.phone,
+        password: tutor.password || "secret123",
+
+        counsellor_id: req.user?.id || 0,
+
+        qualification: tutor.qualification || "",
+        age: tutor.age ? String(tutor.age) : "",
+        location: tutor.state || tutor.location || "",
+        alternatecontact: tutor.alternatePhone || "",
+
+        classes:
+          tutor.teachingDetails?.map((item, index) => {
+            return `${index + 1}|${item.className}`;
+          }) || [],
+
+        subjects:
+          tutor.teachingDetails?.map((item, index) => {
+            return `${index + 1}|${item.subject}`;
+          }) || [],
+      };
+
+      const secondaryResponse = await axios.post(
+        "https://ai.teacherind.com/api/add-tutor",
+        payload,
+      );
+
+      logger.info("Tutor added to secondary DB", {
+        tutorId: tutor.id,
+        response: secondaryResponse.data,
+      });
+    } catch (secondaryError) {
+      logger.error(
+        "SECONDARY DB TUTOR CREATE ERROR",
+        secondaryError?.response?.data || secondaryError.message,
+      );
+    }
   } catch (error) {
     logger.error("CREATE TUTOR ERROR", error);
 
@@ -44,16 +97,30 @@ exports.createTutor = async (req, res) => {
     });
   }
 };
-
 // ======================================================
 // GET ALL TUTORS
 // ======================================================
-
 exports.getTutors = async (req, res) => {
   try {
     logger.info("Fetching tutors");
 
-    // ✅ allowed sorting fields
+    // ======================================================
+    // QUERY PARAMS
+    // ======================================================
+
+    const {
+      search,
+      availableDay,
+      shift,
+      className,
+      subject,
+      syllabus,
+    } = req.query;
+
+    // ======================================================
+    // ALLOWED SORT FIELDS
+    // ======================================================
+
     const allowedSortFields = [
       "fullName",
       "employeeId",
@@ -63,38 +130,123 @@ exports.getTutors = async (req, res) => {
       "createdAt",
     ];
 
-    // ✅ pagination params
-    const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
+    // ======================================================
+    // PAGINATION PARAMS
+    // ======================================================
+
+    const { page, limit, sortBy, sortOrder } = getPaginationParams(
       req,
       allowedSortFields,
       "createdAt",
     );
 
     // ======================================================
-    // FETCH TUTORS
+    // WHERE CONDITION
     // ======================================================
 
-    const { rows: tutors, count: total } = await Tutor.findAndCountAll({
-      where: {
-        isDeleted: false,
-      },
+    const tutorWhere = {
+      isDeleted: false,
+    };
+
+    // ======================================================
+    // SEARCH
+    // ======================================================
+
+    if (search) {
+      tutorWhere[Op.or] = [
+        { fullName: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+        { phone: { [Op.like]: `%${search}%` } },
+        { employeeId: { [Op.like]: `%${search}%` } },
+      ];
+    }
+
+    // ======================================================
+    // FETCH ALL MATCHING TUTORS
+    // ======================================================
+
+    let tutors = await Tutor.findAll({
+      where: tutorWhere,
 
       order: [[sortBy, sortOrder]],
-      limit,
-      offset,
     });
+
+    // ======================================================
+    // FILTER: AVAILABLE DAY
+    // ======================================================
+
+    if (availableDay) {
+      tutors = tutors.filter((tutor) =>
+        (tutor.availableDays || []).includes(availableDay),
+      );
+    }
+
+    // ======================================================
+    // FILTER: SHIFT
+    // ======================================================
+
+    if (shift) {
+      tutors = tutors.filter((tutor) =>
+        (tutor.availabilitySlots || []).some(
+          (slot) => slot.shift === shift,
+        ),
+      );
+    }
+
+    // ======================================================
+    // FILTER: TEACHING DETAILS
+    // ======================================================
+
+    if (className || subject || syllabus) {
+      tutors = tutors.filter((tutor) =>
+        (tutor.teachingDetails || []).some((detail) => {
+          const classMatch = className
+            ? String(detail.className) === String(className)
+            : true;
+
+          const subjectMatch = subject
+            ? String(detail.subject) === String(subject)
+            : true;
+
+          const syllabusMatch = syllabus
+            ? String(detail.syllabus) === String(syllabus)
+            : true;
+
+          return classMatch && subjectMatch && syllabusMatch;
+        }),
+      );
+    }
+
+    // ======================================================
+    // TOTAL COUNT AFTER FILTERING
+    // ======================================================
+
+    const total = tutors.length;
+
+    // ======================================================
+    // PAGINATION
+    // ======================================================
+
+    const startIndex = (page - 1) * limit;
+
+    const endIndex = startIndex + limit;
+
+    tutors = tutors.slice(startIndex, endIndex);
 
     // ======================================================
     // GET CREATED BY USERS
     // ======================================================
 
-    const createdByIds = tutors.map((tutor) => tutor.createdBy).filter(Boolean);
+    const createdByIds = tutors
+      .map((tutor) => tutor.createdBy)
+      .filter(Boolean);
 
     const creators = await User.findAll({
       where: {
         id: {
           [Op.in]: createdByIds,
         },
+
         isDeleted: false,
       },
 
@@ -108,12 +260,13 @@ exports.getTutors = async (req, res) => {
     const creatorMap = {};
 
     creators.forEach((creator) => {
-      creatorMap[creator.id] =
-        `${creator.firstName || ""} ${creator.lastName || ""}`.trim();
+      creatorMap[creator.id] = `${creator.firstName || ""} ${
+        creator.lastName || ""
+      }`.trim();
     });
 
     // ======================================================
-    // ADD creatorName TO RESPONSE
+    // FORMAT RESPONSE
     // ======================================================
 
     const formattedTutors = tutors.map((tutor) => ({
@@ -123,9 +276,13 @@ exports.getTutors = async (req, res) => {
     }));
 
     logger.info("Tutors fetched", {
-      count: tutors.length,
+      count: formattedTutors.length,
       page,
     });
+
+    // ======================================================
+    // RESPONSE
+    // ======================================================
 
     return res.status(200).json({
       success: true,
@@ -134,9 +291,11 @@ exports.getTutors = async (req, res) => {
 
       pagination: {
         total,
-        page,
-        limit,
+        currentPage: page,
+        pageSize: limit,
         totalPages: Math.ceil(total / limit),
+        sortBy,
+        sortOrder,
       },
     });
   } catch (error) {
@@ -144,6 +303,7 @@ exports.getTutors = async (req, res) => {
 
     return res.status(500).json({
       success: false,
+
       message: error.message || "Failed to fetch tutors",
     });
   }
@@ -303,6 +463,42 @@ exports.deleteTutor = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to delete tutor",
+    });
+  }
+};
+exports.uploadDocuments = async (req, res) => {
+  try {
+    if (!req.files?.documents?.length) {
+      logger.warn("No documents uploaded");
+      return res.status(400).json({ message: "No documents uploaded" });
+    }
+
+    const tutor = await Tutor.findByPk(req.params.id);
+    if (!tutor) {
+      logger.warn(`Tutor not found for document upload: ${req.params.id}`);
+      return res.status(404).json({ message: "Not found" });
+    }
+
+    await TutorDocument.bulkCreate(
+      req.files.documents.map((file) => ({
+        tutorId: tutor.id,
+        fileName: file.originalname,
+        filePath: `/uploads/documents/${file.filename}`,
+        fileType: file.mimetype,
+      })),
+    );
+
+    logger.info("Tutor documents uploaded", {
+      tutorId: tutor.id,
+      count: req.files.documents.length,
+    });
+
+    res.json({ success: true });
+  } catch (err) {
+    logger.error("Error uploading staff documents", err);
+    res.status(500).json({
+      success: false,
+      message: err.message,
     });
   }
 };
