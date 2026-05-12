@@ -104,10 +104,6 @@ exports.getTutors = async (req, res) => {
   try {
     logger.info("Fetching tutors");
 
-    // ======================================================
-    // QUERY PARAMS
-    // ======================================================
-
     const {
       search,
       availableDay,
@@ -116,10 +112,6 @@ exports.getTutors = async (req, res) => {
       subject,
       syllabus,
     } = req.query;
-
-    // ======================================================
-    // ALLOWED SORT FIELDS
-    // ======================================================
 
     const allowedSortFields = [
       "fullName",
@@ -130,28 +122,22 @@ exports.getTutors = async (req, res) => {
       "createdAt",
     ];
 
-    // ======================================================
-    // PAGINATION PARAMS
-    // ======================================================
-
     const { page, limit, sortBy, sortOrder } = getPaginationParams(
       req,
       allowedSortFields,
       "createdAt",
     );
 
-    // ======================================================
-    // WHERE CONDITION
-    // ======================================================
-
+    // =========================
+    // BASE WHERE
+    // =========================
     const tutorWhere = {
       isDeleted: false,
     };
 
-    // ======================================================
+    // =========================
     // SEARCH
-    // ======================================================
-
+    // =========================
     if (search) {
       tutorWhere[Op.or] = [
         { fullName: { [Op.like]: `%${search}%` } },
@@ -161,55 +147,68 @@ exports.getTutors = async (req, res) => {
       ];
     }
 
-    // ======================================================
-    // FETCH ALL MATCHING TUTORS
-    // ======================================================
-
-    let tutors = await Tutor.findAll({
+    // =========================
+    // FETCH DATA
+    // =========================
+    const { count, rows } = await Tutor.findAndCountAll({
       where: tutorWhere,
-
       order: [[sortBy, sortOrder]],
+      limit,
+      offset: (page - 1) * limit,
     });
 
-    // ======================================================
-    // FILTER: AVAILABLE DAY
-    // ======================================================
+    // =========================
+    // NORMALIZE DATA
+    // =========================
+    let tutors = rows.map((tutor) => {
+      const data = tutor.toJSON();
 
+      data.availableDays = safeParse(data.availableDays, []);
+      data.availabilitySlots = safeParse(data.availabilitySlots, []);
+      data.teachingDetails = safeParse(data.teachingDetails, []);
+      data.languages = safeParse(data.languages, []);
+      data.documents = safeParse(data.documents, []);
+      data.bankDetails = safeParse(data.bankDetails, {});
+
+      return data;
+    });
+
+    // =========================
+    // FILTER: AVAILABLE DAY
+    // =========================
     if (availableDay) {
       tutors = tutors.filter((tutor) =>
-        (tutor.availableDays || []).includes(availableDay),
+        tutor.availableDays.includes(availableDay),
       );
     }
 
-    // ======================================================
+    // =========================
     // FILTER: SHIFT
-    // ======================================================
-
+    // =========================
     if (shift) {
       tutors = tutors.filter((tutor) =>
-        (tutor.availabilitySlots || []).some(
+        tutor.availabilitySlots.some(
           (slot) => slot.shift === shift,
         ),
       );
     }
 
-    // ======================================================
+    // =========================
     // FILTER: TEACHING DETAILS
-    // ======================================================
-
+    // =========================
     if (className || subject || syllabus) {
       tutors = tutors.filter((tutor) =>
-        (tutor.teachingDetails || []).some((detail) => {
+        tutor.teachingDetails.some((detail) => {
           const classMatch = className
-            ? String(detail.className) === String(className)
+            ? String(detail.className).includes(String(className))
             : true;
 
           const subjectMatch = subject
-            ? String(detail.subject) === String(subject)
+            ? String(detail.subject).includes(String(subject))
             : true;
 
           const syllabusMatch = syllabus
-            ? String(detail.syllabus) === String(syllabus)
+            ? String(detail.syllabus || "").includes(String(syllabus))
             : true;
 
           return classMatch && subjectMatch && syllabusMatch;
@@ -217,78 +216,51 @@ exports.getTutors = async (req, res) => {
       );
     }
 
-    // ======================================================
-    // TOTAL COUNT AFTER FILTERING
-    // ======================================================
-
+    // =========================
+    // FINAL COUNT AFTER FILTER
+    // =========================
     const total = tutors.length;
 
-    // ======================================================
-    // PAGINATION
-    // ======================================================
-
+    // =========================
+    // PAGINATION AFTER FILTER
+    // =========================
     const startIndex = (page - 1) * limit;
-
     const endIndex = startIndex + limit;
 
     tutors = tutors.slice(startIndex, endIndex);
 
-    // ======================================================
-    // GET CREATED BY USERS
-    // ======================================================
-
+    // =========================
+    // CREATED BY MAP
+    // =========================
     const createdByIds = tutors
-      .map((tutor) => tutor.createdBy)
+      .map((t) => t.createdBy)
       .filter(Boolean);
 
     const creators = await User.findAll({
       where: {
-        id: {
-          [Op.in]: createdByIds,
-        },
-
+        id: { [Op.in]: createdByIds },
         isDeleted: false,
       },
-
       attributes: ["id", "firstName", "lastName"],
     });
 
-    // ======================================================
-    // CREATE MAP
-    // ======================================================
-
     const creatorMap = {};
-
-    creators.forEach((creator) => {
-      creatorMap[creator.id] = `${creator.firstName || ""} ${
-        creator.lastName || ""
-      }`.trim();
+    creators.forEach((c) => {
+      creatorMap[c.id] =
+        `${c.firstName || ""} ${c.lastName || ""}`.trim();
     });
 
-    // ======================================================
-    // FORMAT RESPONSE
-    // ======================================================
-
+    // =========================
+    // FINAL RESPONSE FORMAT
+    // =========================
     const formattedTutors = tutors.map((tutor) => ({
-      ...tutor.toJSON(),
-
+      ...tutor,
       createdBy: creatorMap[tutor.createdBy] || null,
     }));
 
-    logger.info("Tutors fetched", {
-      count: formattedTutors.length,
-      page,
-    });
-
-    // ======================================================
-    // RESPONSE
-    // ======================================================
-
     return res.status(200).json({
       success: true,
-
       data: formattedTutors,
-
       pagination: {
         total,
         currentPage: page,
@@ -298,12 +270,12 @@ exports.getTutors = async (req, res) => {
         sortOrder,
       },
     });
+
   } catch (error) {
     logger.error("GET TUTORS ERROR", error);
 
     return res.status(500).json({
       success: false,
-
       message: error.message || "Failed to fetch tutors",
     });
   }
@@ -501,4 +473,15 @@ exports.uploadDocuments = async (req, res) => {
       message: err.message,
     });
   }
+};
+const safeParse = (value, fallback = []) => {
+  if (!value) return fallback;
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch (e) {
+      return fallback;
+    }
+  }
+  return value;
 };
