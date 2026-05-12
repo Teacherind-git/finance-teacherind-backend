@@ -2,9 +2,9 @@
 
 const { Op } = require("sequelize");
 
-const SecondaryUser = require("../models/secondary/User");
-const Tutor = require("../models/primary/Tutor");
-const PrimaryUser = require("../models/primary/User");
+const SecondaryUser = require("../../models/secondary/User");
+const Tutor = require("../../models/primary/Tutor");
+const PrimaryUser = require("../../models/primary/User");
 
 async function migrateTutors() {
   try {
