@@ -110,6 +110,24 @@ exports.getAllTutorSalaries = async (req, res) => {
       ],
     );
 
+    let orderCondition = [[sortBy, sortOrder]];
+
+    if (sortBy === "status") {
+      orderCondition = [
+        [
+          Sequelize.literal(`
+        CASE 
+          WHEN status = 'Pending' THEN 1
+          WHEN status = 'Approved' THEN 2
+          WHEN status = 'Rejected' THEN 3
+          ELSE 4
+        END
+      `),
+          "ASC",
+        ],
+      ];
+    }
+
     /* ===============================
        FETCH SALARIES
     =============================== */
@@ -118,7 +136,7 @@ exports.getAllTutorSalaries = async (req, res) => {
       where: whereCondition,
       limit,
       offset,
-      order: [[sortBy, sortOrder]],
+      order: orderCondition,
       include: [{ model: TutorPayroll, as: "payroll" }],
     });
 
@@ -709,50 +727,8 @@ exports.getTutorSalarySummary = async (req, res) => {
        MONTH / FILTERED DUE
     =============================== */
 
-    /* ===============================
-   MONTH RANGE
-=============================== */
-
-    let monthRange = {};
-
-    // Default current month
-
-    const currentDate = new Date();
-
-    const startOfMonth = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth(),
-      1,
-      0,
-      0,
-      0,
-      0,
-    );
-
-    const endOfMonth = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999,
-    );
-
-    monthRange = {
-      [Op.gte]: startOfMonth,
-      [Op.lte]: endOfMonth,
-    };
-
-    /* ===============================
-   MONTH DUE
-=============================== */
-
     const monthDue = await TutorSalary.sum("amount", {
-      where: {
-        ...whereCondition,
-        payrollMonth: monthRange,
-      },
+      where: { ...whereCondition },
     });
 
     /* ===============================
@@ -762,7 +738,7 @@ exports.getTutorSalarySummary = async (req, res) => {
     const totalPending = await TutorSalary.sum("amount", {
       where: {
         ...whereCondition,
-        status: { [Op.ne]: "Paid" },
+        status: { [Op.ne]: "Pending" },
       },
     });
 
