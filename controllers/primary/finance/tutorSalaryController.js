@@ -4,7 +4,7 @@ const TutorPayroll = require("../../../models/primary/TutorPayroll");
 const TutorSalaryBreakdown = require("../../../models/primary/TutorSalaryBreakdown");
 const SecondaryUser = require("../../../models/secondary/User");
 const { getPaginationParams } = require("../../../utils/pagination");
-const { Op } = require("sequelize");
+const { Op, Sequelize } = require("sequelize");
 const puppeteer = require("puppeteer");
 const salarySlipTemplate = require("../../../templates/tutorSalarySlipTemplate");
 const logger = require("../../../utils/logger"); // ✅ central logger
@@ -117,10 +117,11 @@ exports.getAllTutorSalaries = async (req, res) => {
         [
           Sequelize.literal(`
         CASE 
-          WHEN status = 'Pending' THEN 1
-          WHEN status = 'Approved' THEN 2
-          WHEN status = 'Rejected' THEN 3
-          ELSE 4
+          WHEN status = 'Approved' THEN 1
+          WHEN status = 'Pending' THEN 2
+          WHEN status = 'Paid' THEN 3
+          WHEN status = 'Rejected' THEN 4
+          ELSE 5
         END
       `),
           "ASC",
