@@ -104,14 +104,8 @@ exports.getTutors = async (req, res) => {
   try {
     logger.info("Fetching tutors");
 
-    const {
-      search,
-      availableDay,
-      shift,
-      className,
-      subject,
-      syllabus,
-    } = req.query;
+    const { search, availableDay, shift, className, subject, syllabus } =
+      req.query;
 
     const allowedSortFields = [
       "fullName",
@@ -187,9 +181,7 @@ exports.getTutors = async (req, res) => {
     // =========================
     if (shift) {
       tutors = tutors.filter((tutor) =>
-        tutor.availabilitySlots.some(
-          (slot) => slot.shift === shift,
-        ),
+        tutor.availabilitySlots.some((slot) => slot.shift === shift),
       );
     }
 
@@ -232,9 +224,7 @@ exports.getTutors = async (req, res) => {
     // =========================
     // CREATED BY MAP
     // =========================
-    const createdByIds = tutors
-      .map((t) => t.createdBy)
-      .filter(Boolean);
+    const createdByIds = tutors.map((t) => t.createdBy).filter(Boolean);
 
     const creators = await User.findAll({
       where: {
@@ -246,8 +236,7 @@ exports.getTutors = async (req, res) => {
 
     const creatorMap = {};
     creators.forEach((c) => {
-      creatorMap[c.id] =
-        `${c.firstName || ""} ${c.lastName || ""}`.trim();
+      creatorMap[c.id] = `${c.firstName || ""} ${c.lastName || ""}`.trim();
     });
 
     // =========================
@@ -270,7 +259,6 @@ exports.getTutors = async (req, res) => {
         sortOrder,
       },
     });
-
   } catch (error) {
     logger.error("GET TUTORS ERROR", error);
 
@@ -284,7 +272,6 @@ exports.getTutors = async (req, res) => {
 // ======================================================
 // GET SINGLE TUTOR
 // ======================================================
-
 exports.getTutorById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -293,12 +280,20 @@ exports.getTutorById = async (req, res) => {
       tutorId: id,
     });
 
+    // ======================================================
+    // FETCH TUTOR
+    // ======================================================
+
     const tutor = await Tutor.findOne({
       where: {
         id,
         isDeleted: false,
       },
     });
+
+    // ======================================================
+    // NOT FOUND
+    // ======================================================
 
     if (!tutor) {
       logger.warn("Tutor not found", {
@@ -311,13 +306,57 @@ exports.getTutorById = async (req, res) => {
       });
     }
 
+    // ======================================================
+    // CONVERT TO JSON
+    // ======================================================
+
+    const tutorData = tutor.toJSON();
+
+    // ======================================================
+    // FIX STRINGIFIED JSON FIELDS
+    // ======================================================
+
+    tutorData.languages = safeParse(tutorData.languages, []);
+
+    tutorData.availableDays = safeParse(tutorData.availableDays, []);
+
+    tutorData.availabilitySlots = safeParse(tutorData.availabilitySlots, []);
+
+    tutorData.teachingDetails = safeParse(tutorData.teachingDetails, []);
+
+    tutorData.documents = safeParse(tutorData.documents, []);
+
+    tutorData.bankDetails = safeParse(tutorData.bankDetails, {});
+
+    // ======================================================
+    // GET CREATED BY USER
+    // ======================================================
+
+    if (tutorData.createdBy) {
+      const creator = await User.findOne({
+        where: {
+          id: tutorData.createdBy,
+          isDeleted: false,
+        },
+        attributes: ["id", "firstName", "lastName"],
+      });
+
+      tutorData.createdBy = creator
+        ? `${creator.firstName || ""} ${creator.lastName || ""}`.trim()
+        : null;
+    }
+
     logger.info("Tutor fetched", {
       tutorId: tutor.id,
     });
 
+    // ======================================================
+    // RESPONSE
+    // ======================================================
+
     return res.status(200).json({
       success: true,
-      data: tutor,
+      data: tutorData,
     });
   } catch (error) {
     logger.error("GET TUTOR ERROR", error);
@@ -361,22 +400,91 @@ exports.updateTutor = async (req, res) => {
       });
     }
 
-    await tutor.update({
+    // ============================================
+    // PREPARE UPDATE DATA
+    // ============================================
+
+    const updateData = {
       ...req.body,
       updatedBy: req.user?.id || null,
+    };
+
+    // ============================================
+    // PARSE JSON FIELDS
+    // ============================================
+
+    const jsonFields = [
+      "bankDetails",
+      "teachingDetails",
+      "languages",
+      "availableDays",
+      "availabilitySlots",
+      "documents",
+    ];
+
+    jsonFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        try {
+          updateData[field] =
+            typeof req.body[field] === "string"
+              ? JSON.parse(req.body[field])
+              : req.body[field];
+        } catch (error) {
+          logger.warn(`Invalid JSON format for ${field}`, {
+            field,
+            value: req.body[field],
+          });
+        }
+      }
     });
+
+    // ============================================
+    // BOOLEAN FIELD CONVERSION
+    // ============================================
+
+    const booleanFields = [
+      "hasLaptop",
+      "hasWhiteBoard",
+      "hasDigitalPen",
+      "hasMobile",
+    ];
+
+    booleanFields.forEach((field) => {
+      if (req.body[field] !== undefined) {
+        updateData[field] =
+          req.body[field] === true ||
+          req.body[field] === "true" ||
+          req.body[field] === 1 ||
+          req.body[field] === "1";
+      }
+    });
+
+    // ============================================
+    // UPDATE TUTOR
+    // ============================================
+
+    await tutor.update(updateData);
 
     logger.info("Tutor updated successfully", {
       tutorId: tutor.id,
     });
 
+    // ============================================
+    // FETCH UPDATED DATA
+    // ============================================
+
+    const updatedTutor = await Tutor.findByPk(tutor.id);
+
     return res.status(200).json({
       success: true,
       message: "Tutor updated successfully",
-      data: tutor,
+      data: updatedTutor,
     });
   } catch (error) {
-    logger.error("UPDATE TUTOR ERROR", error);
+    logger.error("UPDATE TUTOR ERROR", {
+      message: error.message,
+      stack: error.stack,
+    });
 
     return res.status(500).json({
       success: false,

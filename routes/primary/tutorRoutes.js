@@ -11,7 +11,7 @@ const {
   getTutorById,
   updateTutor,
   deleteTutor,
-  uploadDocuments
+  uploadDocuments,
 } = require("../../controllers/primary/tutorController");
 
 // ======================================================
@@ -29,7 +29,12 @@ router.get("/", authorizeRoles("SuperAdmin", "Admin", "User"), getTutors);
 
 router.get("/:id", authorizeRoles("SuperAdmin", "Admin", "User"), getTutorById);
 
-router.put("/:id", authorizeRoles("SuperAdmin", "Admin", "User"), updateTutor);
+router.put(
+  "/:id",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  upload.none(),
+  updateTutor,
+);
 
 router.delete(
   "/:id",

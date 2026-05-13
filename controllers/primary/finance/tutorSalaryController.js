@@ -1,4 +1,5 @@
 const TutorSalary = require("../../../models/primary/TutorSalary");
+const Tutor = require("../../../models/primary/Tutor");
 const TutorPayroll = require("../../../models/primary/TutorPayroll");
 const TutorSalaryBreakdown = require("../../../models/primary/TutorSalaryBreakdown");
 const SecondaryUser = require("../../../models/secondary/User");
@@ -150,41 +151,80 @@ exports.getAllTutorSalaries = async (req, res) => {
       };
     });
 
+    const tutorEmails = [
+      ...new Set(tutors.map((s) => s.email).filter(Boolean)),
+    ];
+
+    const tutorDetails = await Tutor.findAll({
+      where: {
+        email: {
+          [Op.in]: tutorEmails,
+        },
+      },
+
+      attributes: ["email", "bankDetails"],
+
+      raw: true,
+    });
+
+    const accountMap = {};
+
+    console.log(tutorDetails);
+
+    tutorDetails.forEach((t) => {
+      accountMap[t.email] = {
+        accountNo: t.bankDetails?.accountNo || "",
+      };
+    });
+
     /* ===============================
        FINAL RESPONSE DATA
     =============================== */
 
-    const finalData = salaries.map((salary) => ({
-      salaryId: salary.id,
-      type: "TUTOR",
-      payrollMonth: salary.payrollMonth,
-      amount: salary.amount,
-      status: salary.status,
-      salaryDate: salary.salaryDate,
-      dueDate: salary.dueDate,
-      finalDueDate: salary.finalDueDate,
-      assignedTo: salary.assignedTo,
-      paidDate: salary.paidDate,
-      tutorId: salary.tutorId,
-      user: tutorMap[salary.tutorId] || { name: "", phone: "", email: "" },
-      payroll: salary.payroll
-        ? {
-            id: salary.payroll.id,
-            totalClasses: salary.payroll.totalClasses,
-            attendedClasses: salary.payroll.attendedClasses,
-            missedClasses: salary.payroll.missedClasses,
-            grossSalary: salary.payroll.grossSalary,
-            netSalary: salary.payroll.netSalary,
+    const finalData = salaries.map((salary) => {
+      const tutorEmail = tutorMap[salary.tutorId]?.email;
 
-            // FIXED — always array
-            deductions: parseList(salary.payroll.deductions),
-            earnings: parseList(salary.payroll.earnings),
+      return {
+        salaryId: salary.id,
+        type: "TUTOR",
+        payrollMonth: salary.payrollMonth,
+        amount: salary.amount,
+        status: salary.status,
+        salaryDate: salary.salaryDate,
+        dueDate: salary.dueDate,
+        finalDueDate: salary.finalDueDate,
+        assignedTo: salary.assignedTo,
+        paidDate: salary.paidDate,
+        tutorId: salary.tutorId,
 
-            totalDeductions: salary.payroll.totalDeductions,
-            totalEarnings: salary.payroll.totalEarnings,
-          }
-        : null,
-    }));
+        user: {
+          ...(tutorMap[salary.tutorId] || {
+            name: "",
+            phone: "",
+            email: "",
+          }),
+
+          accountNo: accountMap[tutorEmail]?.accountNo || "",
+        },
+
+        payroll: salary.payroll
+          ? {
+              id: salary.payroll.id,
+              totalClasses: salary.payroll.totalClasses,
+              attendedClasses: salary.payroll.attendedClasses,
+              missedClasses: salary.payroll.missedClasses,
+              grossSalary: salary.payroll.grossSalary,
+              netSalary: salary.payroll.netSalary,
+
+              deductions: parseList(salary.payroll.deductions),
+              earnings: parseList(salary.payroll.earnings),
+
+              totalDeductions: salary.payroll.totalDeductions,
+              totalEarnings: salary.payroll.totalEarnings,
+            }
+          : null,
+      };
+    });
 
     /* ===============================
        RESPONSE
@@ -568,53 +608,159 @@ exports.getNonAssignedTutorSalaries = async (req, res) => {
 ----------------------------------------------------- */
 exports.getTutorSalarySummary = async (req, res) => {
   try {
-    const today = new Date();
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-
     const whereCondition = { isDeleted: false };
-    const { roleId, department, position, id: userId } = req.user;
+
+    const { search, startMonth, endMonth } = req.query;
 
     /* ===============================
-       ROLE / DEPARTMENT BASED FILTER
+       ROLE / DEPARTMENT FILTER
     =============================== */
-    if (department === "HR" && roleId === 3) {
-      // HR Manager sees only pending
-      whereCondition.status = "Pending";
-    } else if (department === "Finance" && position === "Manager") {
-      // Finance Manager sees all non-pending
-      whereCondition.status = { [Op.notIn]: ["Pending", "Paid"] };
-    } else if (department === "Finance" && position !== "Manager") {
-      // Finance Staff sees only non-pending assigned to themselves
-      whereCondition.status = { [Op.notIn]: ["Pending", "Paid"] };
-      whereCondition.assignedTo = userId;
+
+    if (req.user?.department === "HR") {
+      // HR sees everything
+    } else if (
+      req.user?.department === "Finance" &&
+      req.user?.position === "Manager"
+    ) {
+      whereCondition.status = { [Op.ne]: "Pending" };
+    } else {
+      whereCondition.status = { [Op.ne]: "Pending" };
+      whereCondition.assignedTo = req.user.id;
     }
+
+    /* ===============================
+       PAYROLL MONTH DATE RANGE FILTER
+    =============================== */
+
+    if (startMonth || endMonth) {
+      const dateRange = {};
+
+      // Start month
+      if (startMonth) {
+        dateRange[Op.gte] = new Date(`${startMonth}-01T00:00:00`);
+      }
+
+      // End month
+      if (endMonth) {
+        const endDate = new Date(`${endMonth}-01T00:00:00`);
+
+        endDate.setMonth(endDate.getMonth() + 1);
+        endDate.setDate(0);
+        endDate.setHours(23, 59, 59, 999);
+
+        dateRange[Op.lte] = endDate;
+      }
+
+      whereCondition.payrollMonth = dateRange;
+    }
+
+    /* ===============================
+       SEARCH FILTER
+    =============================== */
+
+    if (search) {
+      let tutorSearchIds = [];
+
+      const tutorSearchCondition = {
+        [Op.or]: [
+          { fullname: { [Op.like]: `%${search}%` } },
+          { phone: { [Op.like]: `%${search}%` } },
+          { email: { [Op.like]: `%${search}%` } },
+        ],
+      };
+
+      const tutors = await SecondaryUser.findAll({
+        where: tutorSearchCondition,
+        attributes: ["id"],
+        raw: true,
+      });
+
+      tutorSearchIds = tutors.map((t) => t.id);
+
+      whereCondition[Op.or] = [
+        { payrollMonth: { [Op.like]: `%${search}%` } },
+        { status: { [Op.like]: `%${search}%` } },
+        { tutorId: { [Op.in]: tutorSearchIds } },
+      ];
+    }
+
+    /* ===============================
+       TODAY RANGE
+    =============================== */
+
+    const startToday = new Date();
+    startToday.setHours(0, 0, 0, 0);
+
+    const endToday = new Date();
+    endToday.setHours(23, 59, 59, 999);
 
     /* ===============================
        TODAY DUE
     =============================== */
+
     const todayDue = await TutorSalary.sum("amount", {
       where: {
         ...whereCondition,
-        dueDate: today,
+        dueDate: {
+          [Op.between]: [startToday, endToday],
+        },
       },
     });
 
     /* ===============================
-       MONTH DUE
+       MONTH / FILTERED DUE
     =============================== */
+
+    /* ===============================
+   MONTH RANGE
+=============================== */
+
+    let monthRange = {};
+
+    // Default current month
+
+    const currentDate = new Date();
+
+    const startOfMonth = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      1,
+      0,
+      0,
+      0,
+      0,
+    );
+
+    const endOfMonth = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
+
+    monthRange = {
+      [Op.gte]: startOfMonth,
+      [Op.lte]: endOfMonth,
+    };
+
+    /* ===============================
+   MONTH DUE
+=============================== */
+
     const monthDue = await TutorSalary.sum("amount", {
       where: {
         ...whereCondition,
-        dueDate: {
-          [Op.between]: [startOfMonth, endOfMonth],
-        },
+        payrollMonth: monthRange,
       },
     });
 
     /* ===============================
        TOTAL PENDING
     =============================== */
+
     const totalPending = await TutorSalary.sum("amount", {
       where: {
         ...whereCondition,
@@ -625,6 +771,7 @@ exports.getTutorSalarySummary = async (req, res) => {
     /* ===============================
        TOTAL PAID
     =============================== */
+
     const totalPaid = await TutorSalary.sum("amount", {
       where: {
         ...whereCondition,
@@ -650,6 +797,7 @@ exports.getTutorSalarySummary = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Failed to fetch tutor salary summary",
+      error: error.message,
     });
   }
 };
