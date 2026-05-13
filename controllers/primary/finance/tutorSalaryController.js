@@ -169,8 +169,6 @@ exports.getAllTutorSalaries = async (req, res) => {
 
     const accountMap = {};
 
-    console.log(tutorDetails);
-
     tutorDetails.forEach((t) => {
       accountMap[t.email] = {
         accountNo: t.bankDetails?.accountNo || "",
