@@ -729,7 +729,12 @@ exports.getTutorSalarySummary = async (req, res) => {
     =============================== */
 
     const monthDue = await TutorSalary.sum("amount", {
-      where: { ...whereCondition },
+      where: {
+        ...whereCondition,
+        status: {
+          [Op.notIn]: ["Paid", "Rejected"],
+        },
+      },
     });
 
     /* ===============================
