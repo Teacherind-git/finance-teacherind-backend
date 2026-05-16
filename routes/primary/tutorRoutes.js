@@ -32,7 +32,7 @@ router.get("/:id", authorizeRoles("SuperAdmin", "Admin", "User"), getTutorById);
 router.put(
   "/:id",
   authorizeRoles("SuperAdmin", "Admin", "User"),
-  upload.none(),
+  upload.fields([{ name: "profilePhoto", maxCount: 1 }]),
   updateTutor,
 );
 

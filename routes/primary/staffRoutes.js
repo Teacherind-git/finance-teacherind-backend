@@ -17,7 +17,7 @@ router.post(
 router.put(
   "/:id",
   authorizeRoles("SuperAdmin", "Admin", "User"),
-  upload.none(),
+  upload.fields([{ name: "profilePhoto", maxCount: 1 }]),
   controller.updateStaff,
 );
 router.put("/salary/update-status/:id", salaryController.updateSalaryStatus);

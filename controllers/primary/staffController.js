@@ -32,8 +32,10 @@ exports.createStaff = async (req, res) => {
     }
 
     // ✅ Profile photo upload
-    if (req.files?.profilePhoto) {
-      data.profilePhoto = `/uploads/profile/${req.files.profilePhoto[0].filename}`;
+    const uploadedFile = req.files?.profilePhoto?.[0];
+
+    if (uploadedFile) {
+      data.profilePhoto = `/uploads/profile/${uploadedFile.filename}`;
     }
 
     // ✅ Parse bank details
@@ -112,12 +114,23 @@ exports.createStaff = async (req, res) => {
 exports.updateStaff = async (req, res) => {
   try {
     const staff = await Staff.findByPk(req.params.id);
+
     if (!staff) {
       logger.warn(`Staff not found for update: ${req.params.id}`);
-      return res.status(404).json({ message: "Not found" });
+
+      return res.status(404).json({
+        message: "Not found",
+      });
     }
 
+    // ✅ Handle uploaded profile photo
+    if (req.files?.profilePhoto) {
+     req.body.profilePhoto = `/uploads/profile/${req.files.profilePhoto[0].filename}`;
+    }
+
+    // ✅ Parse bank details
     let { bankDetails } = req.body;
+
     if (bankDetails && typeof bankDetails === "string") {
       bankDetails = JSON.parse(bankDetails);
       req.body.bankDetails = bankDetails;
@@ -132,10 +145,13 @@ exports.updateStaff = async (req, res) => {
       updatedBy: req.user.id,
     });
 
-    res.json({ success: true });
+    return res.json({
+      success: true,
+    });
   } catch (err) {
     logger.error("Error updating staff", err);
-    res.status(500).json({
+
+    return res.status(500).json({
       success: false,
       message: err.message,
     });

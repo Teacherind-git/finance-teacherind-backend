@@ -16,15 +16,23 @@ const storage = multer.diskStorage({
       uploadPath = "public/uploads/profile";
     }
 
-    // ✅ ensure folder exists
     ensureDirExists(uploadPath);
 
     cb(null, uploadPath);
   },
 
   filename(req, file, cb) {
-    const cleanName = file.originalname.replace(/\s+/g, "");
-    cb(null, `${Date.now()}-${cleanName}`);
+    // ✅ Get original extension
+    const ext = path.extname(file.originalname);
+
+    // ✅ Get filename without extension
+    const name = path.basename(file.originalname, ext);
+
+    // ✅ Clean filename (optional)
+    const cleanName = name.replace(/\s+/g, "_");
+
+    // ✅ Final filename
+    cb(null, `${cleanName}${ext}`);
   },
 });
 

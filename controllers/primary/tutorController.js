@@ -459,6 +459,10 @@ exports.updateTutor = async (req, res) => {
       }
     });
 
+    if (req.files?.profilePhoto?.[0]) {
+      updateData.profilePhoto = `/uploads/profile/${req.files.profilePhoto[0].filename}`;
+    }
+
     // ============================================
     // UPDATE TUTOR
     // ============================================
