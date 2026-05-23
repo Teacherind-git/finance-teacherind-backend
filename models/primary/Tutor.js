@@ -161,6 +161,11 @@ const Tutor = sequelizePrimary.define(
       defaultValue: false,
     },
 
+    hasPad: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+
     // ======================================================
     // LANGUAGES
     // ======================================================

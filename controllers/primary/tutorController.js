@@ -192,15 +192,16 @@ exports.getTutors = async (req, res) => {
       tutors = tutors.filter((tutor) =>
         tutor.teachingDetails.some((detail) => {
           const classMatch = className
-            ? String(detail.className).includes(String(className))
+            ? String(detail.className) === String(className)
             : true;
 
           const subjectMatch = subject
-            ? String(detail.subject).includes(String(subject))
+            ? String(detail.subject) === String(subject)
             : true;
 
           const syllabusMatch = syllabus
-            ? String(detail.syllabus || "").includes(String(syllabus))
+            ? Array.isArray(detail.syllabus) &&
+              detail.syllabus.includes(String(syllabus))
             : true;
 
           return classMatch && subjectMatch && syllabusMatch;
