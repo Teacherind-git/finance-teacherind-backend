@@ -104,8 +104,17 @@ exports.getTutors = async (req, res) => {
   try {
     logger.info("Fetching tutors");
 
-    const { search, availableDay, shift, className, subject, syllabus } =
-      req.query;
+    const { search } = req.query;
+
+    const availableDay = req.query.availableDay || req.query["availableDay[]"];
+
+    const shift = req.query.shift || req.query["shift[]"];
+
+    const className = req.query.className || req.query["className[]"];
+
+    const subject = req.query.subject || req.query["subject[]"];
+
+    const syllabus = req.query.syllabus || req.query["syllabus[]"];
 
     const allowedSortFields = [
       "fullName",
@@ -121,6 +130,25 @@ exports.getTutors = async (req, res) => {
       allowedSortFields,
       "createdAt",
     );
+
+    const normalizeToArray = (value) => {
+      if (!value) return [];
+
+      if (Array.isArray(value)) {
+        return value.map(String);
+      }
+
+      return String(value)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+    };
+
+    const availableDays = normalizeToArray(availableDay);
+    const shifts = normalizeToArray(shift);
+    const classNames = normalizeToArray(className);
+    const subjects = normalizeToArray(subject);
+    const syllabuses = normalizeToArray(syllabus);
 
     // =========================
     // BASE WHERE
@@ -144,11 +172,9 @@ exports.getTutors = async (req, res) => {
     // =========================
     // FETCH DATA
     // =========================
-    const { count, rows } = await Tutor.findAndCountAll({
+    const rows = await Tutor.findAll({
       where: tutorWhere,
       order: [[sortBy, sortOrder]],
-      limit,
-      offset: (page - 1) * limit,
     });
 
     // =========================
@@ -168,40 +194,47 @@ exports.getTutors = async (req, res) => {
     });
 
     // =========================
-    // FILTER: AVAILABLE DAY
+    // FILTER: AVAILABLE DAYS
     // =========================
-    if (availableDay) {
+    if (availableDays.length) {
       tutors = tutors.filter((tutor) =>
-        tutor.availableDays.includes(availableDay),
+        tutor.availableDays.some((day) => availableDays.includes(String(day))),
       );
     }
 
     // =========================
-    // FILTER: SHIFT
+    // FILTER: SHIFTS
     // =========================
-    if (shift) {
+    if (shifts.length) {
       tutors = tutors.filter((tutor) =>
-        tutor.availabilitySlots.some((slot) => slot.shift === shift),
+        tutor.availabilitySlots.some((slot) =>
+          shifts.includes(String(slot.shift)),
+        ),
       );
     }
 
     // =========================
     // FILTER: TEACHING DETAILS
     // =========================
-    if (className || subject || syllabus) {
+    if (classNames.length || subjects.length || syllabuses.length) {
       tutors = tutors.filter((tutor) =>
         tutor.teachingDetails.some((detail) => {
-          const classMatch = className
-            ? String(detail.className) === String(className)
+          const classMatch = classNames.length
+            ? classNames.includes(String(detail.className))
             : true;
 
-          const subjectMatch = subject
-            ? String(detail.subject) === String(subject)
+          const subjectMatch = subjects.length
+            ? subjects.includes(String(detail.subject))
             : true;
 
-          const syllabusMatch = syllabus
-            ? Array.isArray(detail.syllabus) &&
-              detail.syllabus.includes(String(syllabus))
+          const detailSyllabus = Array.isArray(detail.syllabus)
+            ? detail.syllabus.map(String)
+            : detail.syllabus
+              ? [String(detail.syllabus)]
+              : [];
+
+          const syllabusMatch = syllabuses.length
+            ? detailSyllabus.some((s) => syllabuses.includes(s))
             : true;
 
           return classMatch && subjectMatch && syllabusMatch;
@@ -210,22 +243,21 @@ exports.getTutors = async (req, res) => {
     }
 
     // =========================
-    // FINAL COUNT AFTER FILTER
+    // PAGINATION AFTER FILTER
     // =========================
     const total = tutors.length;
 
-    // =========================
-    // PAGINATION AFTER FILTER
-    // =========================
     const startIndex = (page - 1) * limit;
     const endIndex = startIndex + limit;
 
-    tutors = tutors.slice(startIndex, endIndex);
+    const paginatedTutors = tutors.slice(startIndex, endIndex);
 
     // =========================
     // CREATED BY MAP
     // =========================
-    const createdByIds = tutors.map((t) => t.createdBy).filter(Boolean);
+    const createdByIds = [
+      ...new Set(paginatedTutors.map((t) => t.createdBy).filter(Boolean)),
+    ];
 
     const creators = await User.findAll({
       where: {
@@ -236,14 +268,16 @@ exports.getTutors = async (req, res) => {
     });
 
     const creatorMap = {};
-    creators.forEach((c) => {
-      creatorMap[c.id] = `${c.firstName || ""} ${c.lastName || ""}`.trim();
+
+    creators.forEach((creator) => {
+      creatorMap[creator.id] =
+        `${creator.firstName || ""} ${creator.lastName || ""}`.trim();
     });
 
     // =========================
-    // FINAL RESPONSE FORMAT
+    // RESPONSE
     // =========================
-    const formattedTutors = tutors.map((tutor) => ({
+    const formattedTutors = paginatedTutors.map((tutor) => ({
       ...tutor,
       createdBy: creatorMap[tutor.createdBy] || null,
     }));
