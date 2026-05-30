@@ -3,54 +3,92 @@
 const Tutor = require("../../models/primary/Tutor");
 
 const updateMode =
-  process.argv.includes("-u") ||
-  process.argv.includes("--update");
+  process.argv.includes("-u") || process.argv.includes("--update");
 
 async function run() {
   const tutors = await Tutor.findAll();
 
-  const affected = [];
+  let updatedCount = 0;
 
   for (const tutor of tutors) {
-    const teachingDetails = tutor.teachingDetails || [];
-
+    let teachingDetails = tutor.teachingDetails;
     let changed = false;
 
-    const updatedTeachingDetails = teachingDetails.map((detail) => {
-      if (
-        detail?.syllabus &&
-        !Array.isArray(detail.syllabus)
-      ) {
-        changed = true;
+    // Handle null/undefined
+    if (!teachingDetails) {
+      continue;
+    }
 
-        return {
-          ...detail,
-          syllabus: [String(detail.syllabus)],
-        };
+    // Handle JSON string
+    if (typeof teachingDetails === "string") {
+      try {
+        teachingDetails = JSON.parse(teachingDetails);
+        changed = true;
+      } catch (err) {
+        console.log(
+          `Skipping Tutor ${tutor.id} (${tutor.fullName}) - Invalid JSON`,
+        );
+        continue;
+      }
+    }
+
+    // Handle single object instead of array
+    if (!Array.isArray(teachingDetails)) {
+      teachingDetails = [teachingDetails];
+      changed = true;
+    }
+
+    teachingDetails = teachingDetails.map((detail) => {
+      const updated = { ...detail };
+
+      // Normalize syllabus
+      if (!Array.isArray(updated.syllabus)) {
+        updated.syllabus =
+          updated.syllabus == null ? [] : [String(updated.syllabus)];
+
+        changed = true;
       }
 
-      return detail;
+      // Normalize ids to string
+      if (
+        updated.className !== undefined &&
+        typeof updated.className !== "string"
+      ) {
+        updated.className = String(updated.className);
+        changed = true;
+      }
+
+      if (
+        updated.subject !== undefined &&
+        typeof updated.subject !== "string"
+      ) {
+        updated.subject = String(updated.subject);
+        changed = true;
+      }
+
+      return updated;
     });
 
     if (changed) {
-      affected.push({
-        id: tutor.id,
-        employeeId: tutor.employeeId,
-        fullName: tutor.fullName,
-      });
+      console.log(
+        `[${updateMode ? "UPDATE" : "FOUND"}]`,
+        tutor.id,
+        tutor.employeeId,
+        tutor.fullName,
+      );
 
       if (updateMode) {
         await tutor.update({
-          teachingDetails: updatedTeachingDetails,
+          teachingDetails,
         });
+
+        updatedCount++;
       }
     }
   }
 
-  console.table(affected);
-
   console.log(
-    `${updateMode ? "Updated" : "Found"} ${affected.length} tutors`
+    `${updateMode ? "Updated" : "Found"} ${updatedCount} tutor records`,
   );
 
   process.exit(0);
