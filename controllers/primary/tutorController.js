@@ -354,35 +354,22 @@ exports.getTutorById = async (req, res) => {
     // NORMALIZE JSON FIELDS
     // ======================================================
 
-    tutorData.languages = Array.isArray(tutorData.languages)
-      ? tutorData.languages
-      : [];
+    tutorData.languages = safeParse(tutorData.languages, []);
 
-    tutorData.availableDays = Array.isArray(tutorData.availableDays)
-      ? tutorData.availableDays
-      : [];
+    tutorData.availableDays = safeParse(tutorData.availableDays, []);
 
-    tutorData.availabilitySlots = Array.isArray(tutorData.availabilitySlots)
-      ? tutorData.availabilitySlots
-      : [];
+    tutorData.availabilitySlots = safeParse(tutorData.availabilitySlots, []);
 
-    tutorData.teachingDetails = Array.isArray(tutorData.teachingDetails)
-      ? tutorData.teachingDetails
-      : [];
+    tutorData.teachingDetails = safeParse(tutorData.teachingDetails, []);
 
-    tutorData.documents = Array.isArray(tutorData.documents)
-      ? tutorData.documents
-      : [];
+    tutorData.documents = safeParse(tutorData.documents, []);
 
-    tutorData.bankDetails =
-      tutorData.bankDetails && typeof tutorData.bankDetails === "object"
-        ? tutorData.bankDetails
-        : {
-            upi: "",
-            bank: "",
-            ifsc: "",
-            accountNo: "",
-          };
+    tutorData.bankDetails = safeParse(tutorData.bankDetails, {
+      upi: "",
+      bank: "",
+      ifsc: "",
+      accountNo: "",
+    });
 
     // ======================================================
     // FORMAT TEACHING DETAILS (OPTIONAL)
