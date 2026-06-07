@@ -44,8 +44,13 @@ const Tutor = sequelizePrimary.define(
       allowNull: false,
       defaultValue: "Active",
       validate: {
-        isIn: [["Active", "Inactive"]],
+        isIn: [["Active", "Inactive", "Left"]],
       },
+    },
+    
+    reason: {
+      type: DataTypes.TEXT,
+      allowNull: true,
     },
 
     profilePhoto: {

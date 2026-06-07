@@ -1,4 +1,7 @@
 const Tutor = require("../../models/primary/Tutor");
+const Subject = require("../../models/primary/Subject");
+const Class = require("../../models/primary/Class");
+const Syllabus = require("../../models/primary/Syllabus");
 const User = require("../../models/primary/User");
 const TutorDocument = require("../../models/primary/TutorDocument");
 const logger = require("../../utils/logger");
@@ -348,20 +351,130 @@ exports.getTutorById = async (req, res) => {
     const tutorData = tutor.toJSON();
 
     // ======================================================
-    // FIX STRINGIFIED JSON FIELDS
+    // NORMALIZE JSON FIELDS
     // ======================================================
 
-    tutorData.languages = safeParse(tutorData.languages, []);
+    tutorData.languages = Array.isArray(tutorData.languages)
+      ? tutorData.languages
+      : [];
 
-    tutorData.availableDays = safeParse(tutorData.availableDays, []);
+    tutorData.availableDays = Array.isArray(tutorData.availableDays)
+      ? tutorData.availableDays
+      : [];
 
-    tutorData.availabilitySlots = safeParse(tutorData.availabilitySlots, []);
+    tutorData.availabilitySlots = Array.isArray(tutorData.availabilitySlots)
+      ? tutorData.availabilitySlots
+      : [];
 
-    tutorData.teachingDetails = safeParse(tutorData.teachingDetails, []);
+    tutorData.teachingDetails = Array.isArray(tutorData.teachingDetails)
+      ? tutorData.teachingDetails
+      : [];
 
-    tutorData.documents = safeParse(tutorData.documents, []);
+    tutorData.documents = Array.isArray(tutorData.documents)
+      ? tutorData.documents
+      : [];
 
-    tutorData.bankDetails = safeParse(tutorData.bankDetails, {});
+    tutorData.bankDetails =
+      tutorData.bankDetails && typeof tutorData.bankDetails === "object"
+        ? tutorData.bankDetails
+        : {
+            upi: "",
+            bank: "",
+            ifsc: "",
+            accountNo: "",
+          };
+
+    // ======================================================
+    // FORMAT TEACHING DETAILS (OPTIONAL)
+    // ======================================================
+
+    // ======================================================
+    // FORMAT TEACHING DETAILS
+    // ======================================================
+
+    if (
+      Array.isArray(tutorData.teachingDetails) &&
+      tutorData.teachingDetails.length > 0
+    ) {
+      const subjectIds = [
+        ...new Set(
+          tutorData.teachingDetails.map((item) => item.subject).filter(Boolean),
+        ),
+      ];
+
+      const classIds = [
+        ...new Set(
+          tutorData.teachingDetails
+            .map((item) => item.className)
+            .filter(Boolean),
+        ),
+      ];
+
+      const syllabusIds = [
+        ...new Set(
+          tutorData.teachingDetails.flatMap((item) =>
+            Array.isArray(item.syllabus) ? item.syllabus : [],
+          ),
+        ),
+      ];
+
+      const [subjects, classes, syllabuses] = await Promise.all([
+        Subject.findAll({
+          where: {
+            id: subjectIds,
+          },
+          attributes: ["id", "name"],
+        }),
+
+        Class.findAll({
+          where: {
+            id: classIds,
+          },
+          attributes: ["id", "number"],
+        }),
+
+        Syllabus.findAll({
+          where: {
+            id: syllabusIds,
+          },
+          attributes: ["id", "name"],
+        }),
+      ]);
+
+      const subjectMap = Object.fromEntries(
+        subjects.map((item) => [String(item.id), item.name]),
+      );
+
+      const classMap = Object.fromEntries(
+        classes.map((item) => [String(item.id), item.number]),
+      );
+
+      const syllabusMap = Object.fromEntries(
+        syllabuses.map((item) => [String(item.id), item.name]),
+      );
+
+      tutorData.teachingDetails = tutorData.teachingDetails.map((item) => ({
+        subject: subjectMap[String(item.subject)] || item.subject || "",
+
+        syllabus: Array.isArray(item.syllabus)
+          ? item.syllabus.map((id) => syllabusMap[String(id)] || id)
+          : [],
+
+        className: classMap[String(item.className)] || item.className || "",
+      }));
+    }
+
+    // ======================================================
+    // FORMAT AVAILABILITY SLOTS
+    // ======================================================
+
+    tutorData.availabilitySlots = tutorData.availabilitySlots.map((slot) => ({
+      shift: slot.shift || "",
+      fromTime: slot.fromTime || "",
+      toTime: slot.toTime || "",
+      timeRange:
+        slot.fromTime && slot.toTime ? `${slot.fromTime} - ${slot.toTime}` : "",
+    }));
 
     // ======================================================
     // GET CREATED BY USER
@@ -381,7 +494,25 @@ exports.getTutorById = async (req, res) => {
         : null;
     }
 
-    logger.info("Tutor fetched", {
+    // ======================================================
+    // GET UPDATED BY USER
+    // ======================================================
+
+    if (tutorData.updatedBy) {
+      const updater = await User.findOne({
+        where: {
+          id: tutorData.updatedBy,
+          isDeleted: false,
+        },
+        attributes: ["id", "firstName", "lastName"],
+      });
+
+      tutorData.updatedBy = updater
+        ? `${updater.firstName || ""} ${updater.lastName || ""}`.trim()
+        : null;
+    }
+
+    logger.info("Tutor fetched successfully", {
       tutorId: tutor.id,
     });
 
