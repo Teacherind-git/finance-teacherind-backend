@@ -189,12 +189,22 @@ exports.getAllTutorSalaries = async (req, res) => {
     const accountMap = {};
 
     tutorDetails.forEach((t) => {
-      console.log("Tutor Bank Details:", t.email, t.bankDetails);
+      let bankDetails = t.bankDetails;
+
+      // Normalize JSON string → object
+      if (typeof bankDetails === "string") {
+        try {
+          bankDetails = JSON.parse(bankDetails);
+        } catch (err) {
+          bankDetails = {};
+        }
+      }
+
       accountMap[t.email] = {
-        accountNo: t.bankDetails?.accountNo || "",
-        bankName: t.bankDetails?.bank || "",
-        ifscCode: t.bankDetails?.ifsc || "",
-        upiId: t.bankDetails?.upi || "",
+        accountNo: bankDetails?.accountNo || "",
+        bankName: bankDetails?.bank || "",
+        ifscCode: bankDetails?.ifsc || "",
+        upiId: bankDetails?.upi || "",
       };
     });
 
