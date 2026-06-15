@@ -1,6 +1,6 @@
 const Tutor = require("../../models/primary/Tutor");
 const Subject = require("../../models/primary/Subject");
-const Class = require("../../models/primary/Class");
+const Class = require("../../models/primary/ClassRange");
 const Syllabus = require("../../models/primary/Syllabus");
 const User = require("../../models/primary/User");
 const TutorDocument = require("../../models/primary/TutorDocument");
@@ -118,6 +118,8 @@ exports.getTutors = async (req, res) => {
     const subject = req.query.subject || req.query["subject[]"];
 
     const syllabus = req.query.syllabus || req.query["syllabus[]"];
+
+    const englishFluency = req.query.englishFluency;
 
     const allowedSortFields = [
       "fullName",
@@ -241,6 +243,25 @@ exports.getTutors = async (req, res) => {
             : true;
 
           return classMatch && subjectMatch && syllabusMatch;
+        }),
+      );
+    }
+
+    // =========================
+    // FILTER: ENGLISH FLUENCY
+    // =========================
+    if (englishFluency) {
+      tutors = tutors.filter((tutor) =>
+        tutor.languages.some((lang) => {
+          const language = lang.language || lang.name || lang.label;
+
+          const fluency = lang.read || lang.level || lang.proficiency;
+
+          return (
+            String(language).toLowerCase() === "english" &&
+            String(fluency).toLowerCase() ===
+              String(englishFluency).toLowerCase()
+          );
         }),
       );
     }
@@ -417,7 +438,7 @@ exports.getTutorById = async (req, res) => {
           where: {
             id: classIds,
           },
-          attributes: ["id", "number"],
+          attributes: ["id", "label", "fromClass", "toClass"],
         }),
 
         Syllabus.findAll({
@@ -433,7 +454,7 @@ exports.getTutorById = async (req, res) => {
       );
 
       const classMap = Object.fromEntries(
-        classes.map((item) => [String(item.id), item.number]),
+        classes.map((item) => [String(item.id), item.label]),
       );
 
       const syllabusMap = Object.fromEntries(

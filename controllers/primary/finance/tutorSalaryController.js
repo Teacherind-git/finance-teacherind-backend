@@ -189,8 +189,12 @@ exports.getAllTutorSalaries = async (req, res) => {
     const accountMap = {};
 
     tutorDetails.forEach((t) => {
+      console.log("Tutor Bank Details:", t.email, t.bankDetails);
       accountMap[t.email] = {
         accountNo: t.bankDetails?.accountNo || "",
+        bankName: t.bankDetails?.bank || "",
+        ifscCode: t.bankDetails?.ifsc || "",
+        upiId: t.bankDetails?.upi || "",
       };
     });
 
@@ -222,6 +226,9 @@ exports.getAllTutorSalaries = async (req, res) => {
           }),
 
           accountNo: accountMap[tutorEmail]?.accountNo || "",
+          bankName: accountMap[tutorEmail]?.bankName || "",
+          ifscCode: accountMap[tutorEmail]?.ifscCode || "",
+          upiId: accountMap[tutorEmail]?.upiId || "",
         },
 
         payroll: salary.payroll
