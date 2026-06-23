@@ -45,6 +45,7 @@ exports.createTutor = async (req, res) => {
     res.status(201).json({
       success: true,
       message: "Tutor created successfully",
+      staffId: tutor.id,
       data: tutor,
     });
 
@@ -519,6 +520,18 @@ exports.getTutorById = async (req, res) => {
         ? `${updater.firstName || ""} ${updater.lastName || ""}`.trim()
         : null;
     }
+
+    // ======================================================
+    // GET TUTOR DOCUMENTS
+    // ======================================================
+
+    const tutorDocuments = await TutorDocument.findAll({
+      where: { tutorId: tutor.id },
+      attributes: ["id", "fileName", "filePath", "fileType", "createdAt"],
+      order: [["createdAt", "ASC"]],
+    });
+
+    tutorData.tutorDocuments = tutorDocuments.map((doc) => doc.toJSON());
 
     logger.info("Tutor fetched successfully", {
       tutorId: tutor.id,
