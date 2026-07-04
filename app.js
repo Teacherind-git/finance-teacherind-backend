@@ -26,6 +26,7 @@ const financeRoutes = require("./routes/primary/financeRoutes");
 const auditRoutes = require("./routes/primary/auditRoutes");
 const dashboardRoutes = require("./routes/primary/dashboardRoute");
 const tutorsRoutes = require("./routes/primary/tutorRoutes");
+const publicTutorRoutes = require("./routes/primary/publicTutorRoutes");
 
 dotenv.config();
 
@@ -78,6 +79,7 @@ app.use("/api/finance", financeRoutes);
 app.use("/api/payroll-audits", auditRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/tutors", tutorsRoutes);
+app.use("/api/public/tutors", publicTutorRoutes);
 
 /* ---------------- Error Handler ---------------- */
 app.use(errorHandler);

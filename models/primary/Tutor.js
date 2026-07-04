@@ -198,6 +198,31 @@ const Tutor = sequelizePrimary.define(
     },
 
     // ======================================================
+    // DEMO AVAILABILITY
+    // ======================================================
+
+    availableForDemo: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+
+    demoDate: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+
+    demoFromTime: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    demoToTime: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    // ======================================================
     // ADDITIONAL DETAILS
     // ======================================================
 

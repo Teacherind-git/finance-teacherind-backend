@@ -556,6 +556,165 @@ exports.getTutorById = async (req, res) => {
 };
 
 // ======================================================
+// PUBLIC: GET TUTOR DETAILS (BY NAME & MOBILE)
+// ======================================================
+exports.getPublicTutorDetails = async (req, res) => {
+  try {
+    const name = req.query.name?.trim();
+    const mobile = req.query.mobile?.trim();
+
+    if (!name || !mobile) {
+      return res.status(400).json({
+        success: false,
+        message: "Both 'name' and 'mobile' query params are required",
+      });
+    }
+
+    logger.info("Public tutor lookup", { name, mobile });
+
+    const rows = await Tutor.findAll({
+      where: {
+        isDeleted: false,
+        fullName: { [Op.like]: `%${name}%` },
+        phone: mobile,
+      },
+    });
+
+    if (!rows.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No tutor found matching the given name and mobile number",
+      });
+    }
+
+    // ======================================================
+    // RESOLVE TEACHING DETAILS (SUBJECT / CLASS / SYLLABUS NAMES)
+    // ======================================================
+
+    const parsedTutors = rows.map((tutor) => {
+      const data = tutor.toJSON();
+
+      data.teachingDetails = safeParse(data.teachingDetails, []);
+      data.languages = safeParse(data.languages, []);
+      data.availableDays = safeParse(data.availableDays, []);
+      data.availabilitySlots = safeParse(data.availabilitySlots, []);
+
+      return data;
+    });
+
+    const subjectIds = [
+      ...new Set(
+        parsedTutors.flatMap((t) =>
+          t.teachingDetails.map((item) => item.subject).filter(Boolean),
+        ),
+      ),
+    ];
+
+    const classIds = [
+      ...new Set(
+        parsedTutors.flatMap((t) =>
+          t.teachingDetails.map((item) => item.className).filter(Boolean),
+        ),
+      ),
+    ];
+
+    const syllabusIds = [
+      ...new Set(
+        parsedTutors.flatMap((t) =>
+          t.teachingDetails.flatMap((item) =>
+            Array.isArray(item.syllabus) ? item.syllabus : [],
+          ),
+        ),
+      ),
+    ];
+
+    const [subjects, classes, syllabuses] = await Promise.all([
+      Subject.findAll({ where: { id: subjectIds }, attributes: ["id", "name"] }),
+      Class.findAll({
+        where: { id: classIds },
+        attributes: ["id", "label", "fromClass", "toClass"],
+      }),
+      Syllabus.findAll({ where: { id: syllabusIds }, attributes: ["id", "name"] }),
+    ]);
+
+    const subjectMap = Object.fromEntries(
+      subjects.map((item) => [String(item.id), item.name]),
+    );
+
+    const classMap = Object.fromEntries(
+      classes.map((item) => [String(item.id), item.label]),
+    );
+
+    const syllabusMap = Object.fromEntries(
+      syllabuses.map((item) => [String(item.id), item.name]),
+    );
+
+    // ======================================================
+    // BUILD SAFE PUBLIC RESPONSE (NO SALARY / BANK / DOCUMENTS / ADDRESS)
+    // ======================================================
+
+    const data = parsedTutors.map((tutor) => ({
+      fullName: tutor.fullName,
+      employeeId: tutor.employeeId,
+      email: tutor.email,
+      phone: tutor.phone,
+      status: tutor.status,
+      profilePhoto: tutor.profilePhoto,
+      qualification: tutor.qualification,
+      roleName: tutor.roleName,
+      department: tutor.department,
+      position: tutor.position,
+      experience: tutor.experience,
+      preferredLocation: tutor.preferredLocation,
+      shortBio: tutor.shortBio,
+      availableForDemo: tutor.availableForDemo,
+      demoAvailability: tutor.availableForDemo
+        ? {
+            date: tutor.demoDate,
+            fromTime: tutor.demoFromTime,
+            toTime: tutor.demoToTime,
+            timeRange:
+              tutor.demoFromTime && tutor.demoToTime
+                ? `${tutor.demoFromTime} - ${tutor.demoToTime}`
+                : "",
+          }
+        : null,
+      languages: tutor.languages,
+      availableDays: tutor.availableDays,
+      availabilitySlots: tutor.availabilitySlots.map((slot) => ({
+        shift: slot.shift || "",
+        fromTime: slot.fromTime || "",
+        toTime: slot.toTime || "",
+        timeRange:
+          slot.fromTime && slot.toTime
+            ? `${slot.fromTime} - ${slot.toTime}`
+            : "",
+      })),
+      teachingDetails: tutor.teachingDetails.map((item) => ({
+        subject: subjectMap[String(item.subject)] || item.subject || "",
+        syllabus: Array.isArray(item.syllabus)
+          ? item.syllabus.map((id) => syllabusMap[String(id)] || id)
+          : [],
+        className: classMap[String(item.className)] || item.className || "",
+      })),
+    }));
+
+    return res.status(200).json({
+      success: true,
+      count: data.length,
+      data,
+    });
+  } catch (error) {
+    logger.error("PUBLIC GET TUTOR ERROR", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch tutor details",
+    });
+  }
+};
+
+// ======================================================
 // UPDATE TUTOR
 // ======================================================
 
@@ -634,6 +793,7 @@ exports.updateTutor = async (req, res) => {
       "hasWhiteBoard",
       "hasDigitalPen",
       "hasMobile",
+      "availableForDemo",
     ];
 
     booleanFields.forEach((field) => {
