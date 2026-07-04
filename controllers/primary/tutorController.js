@@ -556,34 +556,32 @@ exports.getTutorById = async (req, res) => {
 };
 
 // ======================================================
-// PUBLIC: GET TUTOR DETAILS (BY NAME & MOBILE)
+// PUBLIC: GET TUTOR DETAILS (BY EMAIL)
 // ======================================================
 exports.getPublicTutorDetails = async (req, res) => {
   try {
-    const name = req.query.name?.trim();
-    const mobile = req.query.mobile?.trim();
+    const email = req.query.email?.trim();
 
-    if (!name || !mobile) {
+    if (!email) {
       return res.status(400).json({
         success: false,
-        message: "Both 'name' and 'mobile' query params are required",
+        message: "'email' query param is required",
       });
     }
 
-    logger.info("Public tutor lookup", { name, mobile });
+    logger.info("Public tutor lookup", { email });
 
     const rows = await Tutor.findAll({
       where: {
         isDeleted: false,
-        fullName: { [Op.like]: `%${name}%` },
-        phone: mobile,
+        email,
       },
     });
 
     if (!rows.length) {
       return res.status(404).json({
         success: false,
-        message: "No tutor found matching the given name and mobile number",
+        message: "No tutor found matching the given email",
       });
     }
 
@@ -701,8 +699,7 @@ exports.getPublicTutorDetails = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      count: data.length,
-      data,
+      data: data[0],
     });
   } catch (error) {
     logger.error("PUBLIC GET TUTOR ERROR", error);
