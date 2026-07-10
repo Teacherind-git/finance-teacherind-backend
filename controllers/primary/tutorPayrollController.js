@@ -542,11 +542,15 @@ exports.updateTutorPayroll = async (req, res) => {
   const transaction = await sequelizePrimary.transaction();
 
   try {
+    // NOTE: :id is the TutorSalary id (the specific month being edited),
+    // not the TutorPayroll id — a payroll row can no longer be targeted
+    // directly here, since multiple salary rows may (still, for legacy
+    // data) reference the same payroll row, and editing by payroll id
+    // used to silently corrupt whichever salary row Sequelize happened
+    // to find first.
     const { id } = req.params;
 
     const {
-      payrollMonth,
-      tutorId,
       earnings,
       deductions,
       totalEarnings,
@@ -554,13 +558,22 @@ exports.updateTutorPayroll = async (req, res) => {
       grossSalary,
       netSalary,
       remark,
-      baseSalary,
     } = req.body;
 
-    logger.info("Updating tutor payroll", { id });
+    logger.info("Updating tutor payroll", { salaryId: id });
+
+    const salary = await TutorSalary.findOne({
+      where: { id, isDeleted: false },
+      transaction,
+    });
+
+    if (!salary) {
+      await transaction.rollback();
+      return res.status(404).json({ message: "Tutor salary not found" });
+    }
 
     const payroll = await TutorPayroll.findOne({
-      where: { id, isDeleted: false },
+      where: { id: salary.payrollId, isDeleted: false },
       transaction,
     });
 
@@ -570,13 +583,12 @@ exports.updateTutorPayroll = async (req, res) => {
     }
 
     /* =============================
-       UPDATE PAYROLL
+       UPDATE PAYROLL (financial fields only — payrollMonth/tutorId are
+       fixed at generation time and must never change via this form)
     ============================== */
 
     await payroll.update(
       {
-        payrollMonth,
-        tutorId,
         earnings,
         deductions,
         totalEarnings,
@@ -590,38 +602,27 @@ exports.updateTutorPayroll = async (req, res) => {
     );
 
     /* =============================
-       UPDATE SALARY ENTRY
+       UPDATE THE SPECIFIC SALARY ENTRY BEING EDITED
     ============================== */
 
-    const salary = await TutorSalary.findOne({
-      where: {
-        payrollId: id,
-        isDeleted: false,
+    await salary.update(
+      {
+        amount: netSalary,
+        updatedBy: req.user?.id || null,
       },
-      transaction,
-    });
-
-    if (salary) {
-      await salary.update(
-        {
-          amount: netSalary,
-          payrollMonth,
-          updatedBy: req.user?.id || null,
-        },
-        { transaction },
-      );
-    }
+      { transaction },
+    );
 
     await transaction.commit();
 
-    logger.info("Tutor payroll updated successfully", { id });
+    logger.info("Tutor payroll updated successfully", { salaryId: id });
 
     return res.status(200).json({
       message: "Tutor payroll updated successfully",
       payroll,
     });
   } catch (error) {
-    await sequelizePrimary.transaction.rollback();
+    await transaction.rollback();
 
     logger.error("Error updating tutor payroll", error);
 

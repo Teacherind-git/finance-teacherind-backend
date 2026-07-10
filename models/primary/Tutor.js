@@ -207,19 +207,20 @@ const Tutor = sequelizePrimary.define(
       defaultValue: false,
     },
 
-    demoDate: {
-      type: DataTypes.DATEONLY,
+    demoNotifyValue: {
+      type: DataTypes.INTEGER,
       allowNull: true,
+      validate: {
+        min: 1,
+      },
     },
 
-    demoFromTime: {
+    demoNotifyUnit: {
       type: DataTypes.STRING,
       allowNull: true,
-    },
-
-    demoToTime: {
-      type: DataTypes.STRING,
-      allowNull: true,
+      validate: {
+        isIn: [["hour", "day", "month"]],
+      },
     },
 
     // ======================================================

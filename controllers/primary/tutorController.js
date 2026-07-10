@@ -9,6 +9,20 @@ const { getPaginationParams } = require("../../utils/pagination");
 const { Op } = require("sequelize");
 const axios = require("axios");
 
+const DEMO_NOTIFY_UNIT_LABELS = {
+  hour: "Hour",
+  day: "Day",
+  month: "Month",
+};
+
+const buildDemoNotifyLabel = (value, unit) => {
+  if (!value || !unit) return null;
+
+  const unitLabel = DEMO_NOTIFY_UNIT_LABELS[unit] || unit;
+
+  return `${value} ${unitLabel}${value > 1 ? "s" : ""} Before`;
+};
+
 // ======================================================
 // CREATE TUTOR
 // ======================================================
@@ -666,16 +680,10 @@ exports.getPublicTutorDetails = async (req, res) => {
       preferredLocation: tutor.preferredLocation,
       shortBio: tutor.shortBio,
       availableForDemo: tutor.availableForDemo,
-      demoAvailability: tutor.availableForDemo
-        ? {
-            date: tutor.demoDate,
-            fromTime: tutor.demoFromTime,
-            toTime: tutor.demoToTime,
-            timeRange:
-              tutor.demoFromTime && tutor.demoToTime
-                ? `${tutor.demoFromTime} - ${tutor.demoToTime}`
-                : "",
-          }
+      demoNotifyValue: tutor.availableForDemo ? tutor.demoNotifyValue : null,
+      demoNotifyUnit: tutor.availableForDemo ? tutor.demoNotifyUnit : null,
+      demoNotifyLabel: tutor.availableForDemo
+        ? buildDemoNotifyLabel(tutor.demoNotifyValue, tutor.demoNotifyUnit)
         : null,
       languages: tutor.languages,
       availableDays: tutor.availableDays,

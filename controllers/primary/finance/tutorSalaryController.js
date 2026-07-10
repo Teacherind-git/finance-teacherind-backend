@@ -3,6 +3,7 @@ const Tutor = require("../../../models/primary/Tutor");
 const TutorPayroll = require("../../../models/primary/TutorPayroll");
 const TutorSalaryBreakdown = require("../../../models/primary/TutorSalaryBreakdown");
 const SecondaryUser = require("../../../models/secondary/User");
+const ClassSchedule = require("../../../models/secondary/ClassSchedule");
 const { getPaginationParams } = require("../../../utils/pagination");
 const { Op, Sequelize } = require("sequelize");
 const puppeteer = require("puppeteer");
@@ -10,6 +11,50 @@ const salarySlipTemplate = require("../../../templates/tutorSalarySlipTemplate")
 const logger = require("../../../utils/logger"); // ✅ central logger
 const { parseList } = require("../../../utils/arrayFunction");
 const { fn, col, literal } = require("sequelize");
+
+/* -----------------------------------------------------
+   HELPERS: current payroll cycle vs. historical months
+   -----------------------------------------------------
+   The monthly cron writes one payroll snapshot per tutor for
+   "last month" relative to whenever it ran. That snapshot is trusted
+   as-is for the current cycle. For any older month we recompute the
+   scheduled/attended class counts live from the secondary DB instead
+   of trusting the primary DB's stored snapshot, since a single
+   payroll row can end up referenced by more than one salary month
+   (legacy data / concurrent edits) and would otherwise show stale or
+   duplicated figures for past months.
+----------------------------------------------------- */
+function isCurrentPayrollCycle(payrollMonth) {
+  if (!payrollMonth) return false;
+
+  const now = new Date();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const d = new Date(payrollMonth);
+
+  return (
+    d.getFullYear() === lastMonth.getFullYear() &&
+    d.getMonth() === lastMonth.getMonth()
+  );
+}
+
+async function getLiveScheduleStats(tutorId, payrollMonth) {
+  const d = new Date(payrollMonth);
+  const startDate = new Date(d.getFullYear(), d.getMonth(), 1);
+  const endDate = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+
+  const schedules = await ClassSchedule.findAll({
+    where: {
+      tutor: tutorId,
+      start: { [Op.between]: [startDate, endDate] },
+    },
+    attributes: ["id", "status"],
+  });
+
+  return {
+    totalClasses: schedules.length,
+    attendedClasses: schedules.filter((s) => s.status === 2).length,
+  };
+}
 
 /* -----------------------------------------------------
    1. GET ALL TUTOR SALARIES
@@ -212,53 +257,78 @@ exports.getAllTutorSalaries = async (req, res) => {
        FINAL RESPONSE DATA
     =============================== */
 
-    const finalData = salaries.map((salary) => {
-      const tutorEmail = tutorMap[salary.tutorId]?.email;
+    const finalData = await Promise.all(
+      salaries.map(async (salary) => {
+        const tutorEmail = tutorMap[salary.tutorId]?.email;
 
-      return {
-        salaryId: salary.id,
-        type: "TUTOR",
-        payrollMonth: salary.payrollMonth,
-        amount: salary.amount,
-        status: salary.status,
-        salaryDate: salary.salaryDate,
-        dueDate: salary.dueDate,
-        finalDueDate: salary.finalDueDate,
-        assignedTo: salary.assignedTo,
-        paidDate: salary.paidDate,
-        tutorId: salary.tutorId,
+        // Current payroll cycle → trust the primary DB snapshot as-is.
+        // Older months → re-derive scheduled/attended counts live from
+        // the secondary DB so they can't show stale/shared numbers.
+        let totalClasses = salary.payroll?.totalClasses;
+        let attendedClasses = salary.payroll?.attendedClasses;
 
-        user: {
-          ...(tutorMap[salary.tutorId] || {
-            name: "",
-            phone: "",
-            email: "",
-          }),
+        if (salary.payroll && !isCurrentPayrollCycle(salary.payrollMonth)) {
+          try {
+            const live = await getLiveScheduleStats(
+              salary.tutorId,
+              salary.payrollMonth,
+            );
+            totalClasses = live.totalClasses;
+            attendedClasses = live.attendedClasses;
+          } catch (err) {
+            logger.error("Failed to fetch live schedule stats", {
+              tutorId: salary.tutorId,
+              payrollMonth: salary.payrollMonth,
+              message: err.message,
+            });
+          }
+        }
 
-          accountNo: accountMap[tutorEmail]?.accountNo || "",
-          bankName: accountMap[tutorEmail]?.bankName || "",
-          ifscCode: accountMap[tutorEmail]?.ifscCode || "",
-          upiId: accountMap[tutorEmail]?.upiId || "",
-        },
+        return {
+          salaryId: salary.id,
+          type: "TUTOR",
+          payrollMonth: salary.payrollMonth,
+          amount: salary.amount,
+          status: salary.status,
+          salaryDate: salary.salaryDate,
+          dueDate: salary.dueDate,
+          finalDueDate: salary.finalDueDate,
+          assignedTo: salary.assignedTo,
+          paidDate: salary.paidDate,
+          tutorId: salary.tutorId,
 
-        payroll: salary.payroll
-          ? {
-              id: salary.payroll.id,
-              totalClasses: salary.payroll.totalClasses,
-              attendedClasses: salary.payroll.attendedClasses,
-              missedClasses: salary.payroll.missedClasses,
-              grossSalary: salary.payroll.grossSalary,
-              netSalary: salary.payroll.netSalary,
+          user: {
+            ...(tutorMap[salary.tutorId] || {
+              name: "",
+              phone: "",
+              email: "",
+            }),
 
-              deductions: parseList(salary.payroll.deductions),
-              earnings: parseList(salary.payroll.earnings),
+            accountNo: accountMap[tutorEmail]?.accountNo || "",
+            bankName: accountMap[tutorEmail]?.bankName || "",
+            ifscCode: accountMap[tutorEmail]?.ifscCode || "",
+            upiId: accountMap[tutorEmail]?.upiId || "",
+          },
 
-              totalDeductions: salary.payroll.totalDeductions,
-              totalEarnings: salary.payroll.totalEarnings,
-            }
-          : null,
-      };
-    });
+          payroll: salary.payroll
+            ? {
+                id: salary.payroll.id,
+                totalClasses,
+                attendedClasses,
+                missedClasses: salary.payroll.missedClasses,
+                grossSalary: salary.payroll.grossSalary,
+                netSalary: salary.payroll.netSalary,
+
+                deductions: parseList(salary.payroll.deductions),
+                earnings: parseList(salary.payroll.earnings),
+
+                totalDeductions: salary.payroll.totalDeductions,
+                totalEarnings: salary.payroll.totalEarnings,
+              }
+            : null,
+        };
+      }),
+    );
 
     /* ===============================
        RESPONSE
