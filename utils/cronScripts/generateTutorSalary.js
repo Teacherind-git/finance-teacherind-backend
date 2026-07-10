@@ -207,21 +207,10 @@ async function generateTutorSalary() {
 
         if (!payrollItem) continue;
 
-        // Default full pay
-        let calculatedAmount = payrollItem.basePay;
-        let classUnits = 1;
-
-        // Half pay for 30 min classes
-        if (Number(sc.duration) === 30) {
-          calculatedAmount = payrollItem.basePay / 2;
-          classUnits = 0.5;
-        }
-
-        // Full pay for 60 min classes
-        if (Number(sc.duration) === 60) {
-          calculatedAmount = payrollItem.basePay;
-          classUnits = 1;
-        }
+        // Pay scales linearly with class length — 60 min is 1 unit of
+        // basePay (30 min = 0.5x, 90 min = 1.5x, 120 min = 2x, ...).
+        const classUnits = Number(sc.duration) / 60;
+        const calculatedAmount = payrollItem.basePay * classUnits;
 
         attendedCount++;
 
@@ -238,7 +227,6 @@ async function generateTutorSalary() {
 
           duration: sc.duration,
 
-          // 1 for 60 mins, 0.5 for 30 mins
           classUnits,
 
           // actual earned amount
