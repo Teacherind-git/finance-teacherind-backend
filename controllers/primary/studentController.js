@@ -1,13 +1,15 @@
 const Student = require("../../models/primary/Student");
 const StudentDetail = require("../../models/primary/StudentDetail");
-const Subject = require("../../models/primary/Subject");
-const Package = require("../../models/primary/Package");
-const ClassRange = require("../../models/primary/ClassRange");
+const SecondaryUser = require("../../models/secondary/User");
 const { sequelizePrimary } = require("../../config/db");
 const logger = require("../../utils/logger");
 const axios = require("axios");
 const { getPaginationParams } = require("../../utils/pagination");
 const { Op } = require("sequelize");
+const {
+  getActivePackages,
+  buildBreakdown,
+} = require("../../utils/secondaryBilling");
 
 /* ================= CREATE STUDENT ================= */
 exports.createStudent = async (req, res) => {
@@ -100,76 +102,49 @@ exports.createStudent = async (req, res) => {
   }
 };
 
-/* ================= GET ALL STUDENTS ================= */
+/* ================= GET ALL STUDENTS (secondary DB, role = 4) ================= */
 exports.getAllStudents = async (req, res) => {
   try {
-    const allowedSortFields = [
-      "createdAt",
-      "updatedAt",
-      "name",
-      "email",
-      "status",
-    ];
+    logger.info("Fetching all students");
 
     const { search } = req.query;
 
     const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
       req,
-      allowedSortFields,
-      "createdAt",
+      ["id", "fullname", "email", "status"],
+      "id",
     );
 
-    logger.info("Fetching students with pagination & sorting", {
-      page,
-      limit,
-      sortBy,
-      sortOrder,
-    });
-
-    let whereCondition = {
-      isDeleted: false,
-    };
+    let whereCondition = { role: 4 };
 
     if (search) {
-      whereCondition[Op.or] = [{ name: { [Op.like]: `%${search}%` } }];
+      whereCondition[Op.or] = [
+        { fullname: { [Op.like]: `%${search}%` } },
+        { email: { [Op.like]: `%${search}%` } },
+        { phone: { [Op.like]: `%${search}%` } },
+      ];
     }
 
-    const { rows: students, count } = await Student.findAndCountAll({
+    const { count, rows } = await SecondaryUser.findAndCountAll({
       where: whereCondition,
-      include: [
-        {
-          model: StudentDetail,
-          as: "details",
-          include: [
-            {
-              model: ClassRange,
-              as: "class_range",
-              attributes: ["id", "label"],
-            },
-            {
-              model: Subject,
-              as: "subject",
-              attributes: ["id", "name"],
-            },
-            {
-              model: Package,
-              as: "package",
-              attributes: ["id", "name"],
-            },
-          ],
-        },
-      ],
+      attributes: ["id", "fullname", "email", "phone", "status"],
       limit,
       offset,
       order: [[sortBy, sortOrder]],
-      distinct: true,
+      raw: true,
     });
 
-    logger.info(`Students fetched: ${students.length}`);
+    const formattedStudents = rows.map((student) => ({
+      id: student.id,
+      fullName: student.fullname,
+      email: student.email,
+      phone: student.phone,
+      status: student.status === 1 ? "Active" : "Inactive",
+    }));
 
     res.status(200).json({
       success: true,
-      data: students,
+      data: formattedStudents,
       pagination: {
         totalRecords: count,
         currentPage: page,
@@ -195,8 +170,10 @@ exports.getStudent = async (req, res) => {
 
     logger.info(`Fetching student by ID: ${id}`);
 
-    const student = await Student.findByPk(id, {
-      include: { model: StudentDetail, as: "details" },
+    const student = await SecondaryUser.findOne({
+      where: { id, role: 4 },
+      attributes: ["id", "fullname", "email", "phone", "status"],
+      raw: true,
     });
 
     if (!student) {
@@ -206,7 +183,57 @@ exports.getStudent = async (req, res) => {
         .json({ success: false, message: "Student not found" });
     }
 
-    res.status(200).json({ success: true, student });
+    let subjectDetails = null;
+    try {
+      const { data } = await axios.post(
+        "https://ai.teacherind.com/api/student-subject-details",
+        { student_id: id },
+      );
+      subjectDetails = data;
+    } catch (apiError) {
+      logger.error("Failed to fetch student subject details", {
+        studentId: id,
+        error: apiError.response?.data || apiError.message,
+      });
+    }
+
+    let billing = null;
+    const subjects = subjectDetails?.data?.subjects;
+    if (subjects?.length) {
+      const packages = await getActivePackages();
+      if (packages.length) {
+        const {
+          breakdown,
+          totalClasses,
+          examFee,
+          totalAmount,
+          perClassRate,
+          primaryPackage,
+        } = buildBreakdown(subjects, packages);
+        billing = {
+          packageId: primaryPackage?.id || null,
+          packageName: primaryPackage?.name || null,
+          perClassRate,
+          totalClasses,
+          examFee,
+          totalAmount,
+          breakdown,
+        };
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      student: {
+        id: student.id,
+        fullName: student.fullname,
+        email: student.email,
+        phone: student.phone,
+        status: student.status === 1 ? "Active" : "Inactive",
+        subjectDetails,
+        billing,
+      },
+    });
   } catch (error) {
     logger.error("Error fetching student", error);
     res
@@ -320,34 +347,24 @@ exports.deleteStudent = async (req, res) => {
       .json({ success: false, message: "Failed to delete student" });
   }
 };
-/* ================= STUDENT SUMMARY ================= */
+/* ================= STUDENT SUMMARY (secondary DB, role = 4) ================= */
 exports.getStudentSummary = async (req, res) => {
   try {
     logger.info("Fetching student summary");
 
-    const [totalStudents, demoStudents, convertedStudents, discardStudents] =
+    const [totalStudents, activeStudents, inactiveStudents] =
       await Promise.all([
-        Student.count({
-          where: { isDeleted: false },
-        }),
-        Student.count({
-          where: { isDeleted: false, status: "Demo" },
-        }),
-        Student.count({
-          where: { isDeleted: false, status: "Converted" },
-        }),
-        Student.count({
-          where: { isDeleted: false, status: "Discarded" },
-        }),
+        SecondaryUser.count({ where: { role: 4 } }),
+        SecondaryUser.count({ where: { role: 4, status: 1 } }),
+        SecondaryUser.count({ where: { role: 4, status: { [Op.ne]: 1 } } }),
       ]);
 
     res.status(200).json({
       success: true,
       data: {
         totalStudents,
-        demoStudents,
-        convertedStudents,
-        discardStudents,
+        activeStudents,
+        inactiveStudents,
       },
     });
   } catch (error) {
