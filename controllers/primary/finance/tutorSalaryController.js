@@ -831,7 +831,7 @@ exports.getTutorSalarySummary = async (req, res) => {
     const totalPending = await TutorSalary.sum("amount", {
       where: {
         ...whereCondition,
-        status: { [Op.ne]: "Pending" },
+        status: { [Op.eq]: "Pending" },
       },
     });
 

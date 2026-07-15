@@ -722,7 +722,7 @@ exports.getStaffSalarySummary = async (req, res) => {
     const totalPending = await StaffSalary.sum("amount", {
       where: {
         ...whereCondition,
-        status: { [Op.ne]: "Paid" },
+        status: { [Op.eq]: "Pending" },
       },
     });
 
