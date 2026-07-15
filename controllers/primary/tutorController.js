@@ -831,11 +831,67 @@ exports.updateTutor = async (req, res) => {
 
     const updatedTutor = await Tutor.findByPk(tutor.id);
 
-    return res.status(200).json({
+    // ============================================
+    // SEND RESPONSE TO CLIENT
+    // ============================================
+
+    res.status(200).json({
       success: true,
       message: "Tutor updated successfully",
       data: updatedTutor,
     });
+
+    // ============================================
+    // AFTER PRIMARY SUCCESS → CALL SECONDARY API
+    // ============================================
+
+    try {
+      const languages = safeParse(updatedTutor.languages, []);
+      const availableDays = safeParse(updatedTutor.availableDays, []);
+      const availabilitySlots = safeParse(updatedTutor.availabilitySlots, []);
+      const teachingDetails = safeParse(updatedTutor.teachingDetails, []);
+
+      const payload = {
+        email: updatedTutor.email,
+        fullName: updatedTutor.fullName,
+        employeeId: updatedTutor.employeeId,
+        qualification: updatedTutor.qualification || "",
+        experience: updatedTutor.experience
+          ? String(updatedTutor.experience)
+          : "",
+        shortBio: updatedTutor.shortBio || "",
+        preferredLocation: updatedTutor.preferredLocation || "",
+        availableForDemo: !!updatedTutor.availableForDemo,
+        profilePhoto: updatedTutor.profilePhoto || "",
+        languages,
+        availableDays,
+        availabilitySlots: availabilitySlots.map((slot) => ({
+          shift: slot.shift || "",
+          fromTime: slot.fromTime || "",
+          toTime: slot.toTime || "",
+          timeRange:
+            slot.fromTime && slot.toTime
+              ? `${slot.fromTime} - ${slot.toTime}`
+              : "",
+        })),
+        teachingDetails,
+      };
+
+      const secondaryResponse = await axios.post(
+        "https://ai.teacherind.com/api/tutor-profile/update",
+        payload,
+      );
+
+      logger.info("Tutor updated in secondary DB", {
+        tutorId: updatedTutor.id,
+        response: secondaryResponse.data,
+      });
+    } catch (secondaryError) {
+      logger.error(
+        "SECONDARY DB TUTOR UPDATE ERROR",
+        secondaryError?.response?.data || secondaryError.message,
+      );
+    }
   } catch (error) {
     logger.error("UPDATE TUTOR ERROR", {
       message: error.message,
