@@ -16,7 +16,7 @@ const { parseList } = require("../../../utils/arrayFunction");
 exports.getAllSalaries = async (req, res) => {
   try {
     const whereCondition = { isDeleted: false };
-    const { search } = req.query;
+    const { search, startMonth, endMonth } = req.query;
 
     /* ===============================
        DEPARTMENT FILTER
@@ -30,6 +30,30 @@ exports.getAllSalaries = async (req, res) => {
     } else {
       whereCondition.status = { [Op.ne]: "Pending" };
       whereCondition.assignedTo = req.user.id;
+    }
+
+    /* ===============================
+       PAYROLL MONTH DATE RANGE FILTER
+    =============================== */
+
+    if (startMonth || endMonth) {
+      const dateRange = {};
+
+      if (startMonth) {
+        dateRange[Op.gte] = new Date(`${startMonth}-01T00:00:00`);
+      }
+
+      if (endMonth) {
+        const endDate = new Date(`${endMonth}-01T00:00:00`);
+
+        endDate.setMonth(endDate.getMonth() + 1);
+        endDate.setDate(0);
+        endDate.setHours(23, 59, 59, 999);
+
+        dateRange[Op.lte] = endDate;
+      }
+
+      whereCondition.payrollMonth = dateRange;
     }
 
     /* ===============================
@@ -628,6 +652,7 @@ exports.getStaffSalarySummary = async (req, res) => {
     const whereCondition = { isDeleted: false };
 
     const { roleId, department, position, id: userId } = req.user;
+    const { startMonth, endMonth } = req.query;
 
     /* ===============================
        ROLE / DEPARTMENT BASED FILTER
@@ -643,6 +668,30 @@ exports.getStaffSalarySummary = async (req, res) => {
       // Finance Staff sees only non-pending salaries assigned to themselves
       whereCondition.status = { [Op.notIn]: ["Pending", "Paid"] };
       whereCondition.assignedTo = userId;
+    }
+
+    /* ===============================
+       PAYROLL MONTH DATE RANGE FILTER
+    =============================== */
+
+    if (startMonth || endMonth) {
+      const dateRange = {};
+
+      if (startMonth) {
+        dateRange[Op.gte] = new Date(`${startMonth}-01T00:00:00`);
+      }
+
+      if (endMonth) {
+        const endDate = new Date(`${endMonth}-01T00:00:00`);
+
+        endDate.setMonth(endDate.getMonth() + 1);
+        endDate.setDate(0);
+        endDate.setHours(23, 59, 59, 999);
+
+        dateRange[Op.lte] = endDate;
+      }
+
+      whereCondition.payrollMonth = dateRange;
     }
 
     /* ===============================
