@@ -49,7 +49,7 @@ router.put(
   secondaryStudentBillController.markBillPaid
 );
 router.get(
-  "/secondary-bills/invoice/:studentId",
+  "/secondary-bills/invoice/:billId",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   secondaryStudentBillController.generateInvoicePdf
 );

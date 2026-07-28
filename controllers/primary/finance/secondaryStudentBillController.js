@@ -377,10 +377,9 @@ exports.getBillsSummary = async (req, res) => {
 };
 
 /* ================= BUILD INVOICE DATA FROM BREAKDOWN ================= */
-const getSecondaryInvoiceData = async (secondaryStudentId) => {
+const getSecondaryInvoiceData = async (billId) => {
   const bill = await SecondaryStudentBill.findOne({
-    where: { secondaryStudentId, isDeleted: false },
-    order: [["billDate", "DESC"]],
+    where: { id: billId, isDeleted: false },
   });
 
   if (!bill) return null;
@@ -437,10 +436,10 @@ const getSecondaryInvoiceData = async (secondaryStudentId) => {
 
 /* ================= GENERATE INVOICE PDF FOR SECONDARY STUDENT ================= */
 exports.generateInvoicePdf = async (req, res) => {
-  const { studentId } = req.params;
+  const { billId } = req.params;
 
   try {
-    const invoiceData = await getSecondaryInvoiceData(studentId);
+    const invoiceData = await getSecondaryInvoiceData(billId);
 
     if (!invoiceData) {
       return res.status(404).json({ message: "Invoice not found" });

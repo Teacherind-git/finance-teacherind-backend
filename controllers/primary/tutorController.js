@@ -780,9 +780,8 @@ exports.updateTutor = async (req, res) => {
             typeof req.body[field] === "string"
               ? JSON.parse(req.body[field])
               : req.body[field];
-        } catch (error) {
-          logger.warn(`Invalid JSON format for ${field}`, {
-            field,
+        } catch (err) {
+          logger.warn(`Invalid JSON for ${field}`, {
             value: req.body[field],
           });
         }
@@ -790,7 +789,7 @@ exports.updateTutor = async (req, res) => {
     });
 
     // ============================================
-    // BOOLEAN FIELD CONVERSION
+    // BOOLEAN CONVERSION
     // ============================================
 
     const booleanFields = [
@@ -810,6 +809,10 @@ exports.updateTutor = async (req, res) => {
           req.body[field] === "1";
       }
     });
+
+    // ============================================
+    // PROFILE PHOTO
+    // ============================================
 
     if (req.files?.profilePhoto?.[0]) {
       updateData.profilePhoto = `/uploads/profile/${req.files.profilePhoto[0].filename}`;
@@ -831,21 +834,15 @@ exports.updateTutor = async (req, res) => {
 
     const updatedTutor = await Tutor.findByPk(tutor.id);
 
-    // ============================================
-    // SEND RESPONSE TO CLIENT
-    // ============================================
-
-    res.status(200).json({
-      success: true,
-      message: "Tutor updated successfully",
-      data: updatedTutor,
-    });
+    console.log("Updated Tutor:", updatedTutor?.email);
 
     // ============================================
-    // AFTER PRIMARY SUCCESS → CALL SECONDARY API
+    // SECONDARY API CALL
     // ============================================
 
     try {
+      console.log("Preparing secondary payload...");
+
       const languages = safeParse(updatedTutor.languages, []);
       const availableDays = safeParse(updatedTutor.availableDays, []);
       const availabilitySlots = safeParse(updatedTutor.availabilitySlots, []);
@@ -856,6 +853,7 @@ exports.updateTutor = async (req, res) => {
         fullName: updatedTutor.fullName,
         employeeId: updatedTutor.employeeId,
         qualification: updatedTutor.qualification || "",
+        status: updatedTutor.status || "",
         experience: updatedTutor.experience
           ? String(updatedTutor.experience)
           : "",
@@ -877,21 +875,52 @@ exports.updateTutor = async (req, res) => {
         teachingDetails,
       };
 
+      console.log("Calling secondary API...", payload);
+
       const secondaryResponse = await axios.post(
         "https://ai.teacherind.com/api/tutor-profile/update",
         payload,
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          timeout: 15000,
+        }
       );
+
+      console.log("Secondary API Success:", secondaryResponse.data);
 
       logger.info("Tutor updated in secondary DB", {
         tutorId: updatedTutor.id,
         response: secondaryResponse.data,
       });
+
     } catch (secondaryError) {
-      logger.error(
-        "SECONDARY DB TUTOR UPDATE ERROR",
-        secondaryError?.response?.data || secondaryError.message,
+      console.error(
+        "Secondary API Error:",
+        secondaryError.response?.data || secondaryError.message
       );
+
+      logger.error("SECONDARY DB UPDATE ERROR", {
+        message: secondaryError.message,
+        response: secondaryError.response?.data,
+        stack: secondaryError.stack,
+      });
+
+      // Do NOT return error here.
+      // Primary update already succeeded.
     }
+
+    // ============================================
+    // SEND RESPONSE
+    // ============================================
+
+    return res.status(200).json({
+      success: true,
+      message: "Tutor updated successfully",
+      data: updatedTutor,
+    });
+
   } catch (error) {
     logger.error("UPDATE TUTOR ERROR", {
       message: error.message,
