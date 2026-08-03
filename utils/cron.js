@@ -39,33 +39,6 @@ cron.schedule("0 * * * *", () => {
 });
 
 /**
- * 🕛 DAILY - Bills (Midnight)
- */
-cron.schedule(
-  "0 0 * * *",
-  async () => {
-    const time = getTime();
-
-    try {
-      logger.info(`🧾 [${time}] Running daily bill cron...`);
-
-      // Lazy load (prevents startup crash)
-      const generateBills = require("./cronScripts/generateBills");
-      const updateBillStatus = require("./cronScripts/updateBillStatus");
-
-      await safeRun(generateBills, "generateBills");
-      await delay(3000); // prevent DB overload
-      await safeRun(updateBillStatus, "updateBillStatus");
-
-      logger.info(`✅ [${time}] Bill cron completed`);
-    } catch (err) {
-      logger.error(`❌ [${time}] Bill cron failed`, err);
-    }
-  },
-  { timezone: "Asia/Kolkata" }
-);
-
-/**
  * 📅 7th - Generate Salaries
  */
 cron.schedule(

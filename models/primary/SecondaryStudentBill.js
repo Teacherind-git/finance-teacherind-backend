@@ -15,7 +15,14 @@ const SecondaryStudentBill = sequelizePrimary.define(
       allowNull: true,
       references: { model: "packages", key: "id" },
     },
-    breakdown: { type: DataTypes.JSON, allowNull: false },
+    breakdown: {
+      type: DataTypes.JSON,
+      allowNull: false,
+      get() {
+        const raw = this.getDataValue("breakdown");
+        return typeof raw === "string" ? JSON.parse(raw) : raw;
+      },
+    },
     amount: { type: DataTypes.FLOAT, allowNull: false },
     billDate: { type: DataTypes.DATE, allowNull: false },
     dueDate: { type: DataTypes.DATE, allowNull: false },
