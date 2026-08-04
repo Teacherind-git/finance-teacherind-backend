@@ -11,6 +11,18 @@ const {
   buildBreakdown,
 } = require("../../utils/secondaryBilling");
 
+/* ================= STATUS HELPERS ================= */
+// Legacy `users.status`: 0 = Left, 1 = Active, 2 = Course Completed, 3 = Inactive
+const STUDENT_STATUS_MAP = {
+  0: "Left",
+  1: "Active",
+  2: "Course Completed",
+  3: "Inactive",
+};
+
+const formatStudentStatus = (rawStatus) =>
+  STUDENT_STATUS_MAP[rawStatus] || "Inactive";
+
 /* ================= CREATE STUDENT ================= */
 exports.createStudent = async (req, res) => {
   const t = await sequelizePrimary.transaction();
@@ -107,11 +119,11 @@ exports.getAllStudents = async (req, res) => {
   try {
     logger.info("Fetching all students");
 
-    const { search } = req.query;
+    const { search, status } = req.query;
 
     const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
       req,
-      ["id", "fullname", "email", "status"],
+      ["id", "fullname", "email", "status", "admissionno"],
       "id",
     );
 
@@ -125,9 +137,20 @@ exports.getAllStudents = async (req, res) => {
       ];
     }
 
+    const STATUS_FILTER_MAP = {
+      Left: 0,
+      Active: 1,
+      "Course Completed": 2,
+      Inactive: 3,
+    };
+
+    if (status && status in STATUS_FILTER_MAP) {
+      whereCondition.status = STATUS_FILTER_MAP[status];
+    }
+
     const { count, rows } = await SecondaryUser.findAndCountAll({
       where: whereCondition,
-      attributes: ["id", "fullname", "email", "phone", "status"],
+      attributes: ["id", "fullname", "email", "phone", "status", "admissionno"],
       limit,
       offset,
       order: [[sortBy, sortOrder]],
@@ -139,7 +162,8 @@ exports.getAllStudents = async (req, res) => {
       fullName: student.fullname,
       email: student.email,
       phone: student.phone,
-      status: student.status === 1 ? "Active" : "Inactive",
+      status: formatStudentStatus(student.status),
+      admissionNo: student.admissionno,
     }));
 
     res.status(200).json({
@@ -172,7 +196,7 @@ exports.getStudent = async (req, res) => {
 
     const student = await SecondaryUser.findOne({
       where: { id, role: 4 },
-      attributes: ["id", "fullname", "email", "phone", "status"],
+      attributes: ["id", "fullname", "email", "phone", "status", "admissionno"],
       raw: true,
     });
 
@@ -229,7 +253,8 @@ exports.getStudent = async (req, res) => {
         fullName: student.fullname,
         email: student.email,
         phone: student.phone,
-        status: student.status === 1 ? "Active" : "Inactive",
+        status: formatStudentStatus(student.status),
+        admissionNo: student.admissionno,
         subjectDetails,
         billing,
       },
@@ -352,12 +377,19 @@ exports.getStudentSummary = async (req, res) => {
   try {
     logger.info("Fetching student summary");
 
-    const [totalStudents, activeStudents, inactiveStudents] =
-      await Promise.all([
-        SecondaryUser.count({ where: { role: 4 } }),
-        SecondaryUser.count({ where: { role: 4, status: 1 } }),
-        SecondaryUser.count({ where: { role: 4, status: { [Op.ne]: 1 } } }),
-      ]);
+    const [
+      totalStudents,
+      leftStudents,
+      activeStudents,
+      courseCompletedStudents,
+      inactiveStudents,
+    ] = await Promise.all([
+      SecondaryUser.count({ where: { role: 4 } }),
+      SecondaryUser.count({ where: { role: 4, status: 0 } }),
+      SecondaryUser.count({ where: { role: 4, status: 1 } }),
+      SecondaryUser.count({ where: { role: 4, status: 2 } }),
+      SecondaryUser.count({ where: { role: 4, status: 3 } }),
+    ]);
 
     res.status(200).json({
       success: true,
@@ -365,6 +397,8 @@ exports.getStudentSummary = async (req, res) => {
         totalStudents,
         activeStudents,
         inactiveStudents,
+        leftStudents,
+        courseCompletedStudents,
       },
     });
   } catch (error) {

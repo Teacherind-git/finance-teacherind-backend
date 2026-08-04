@@ -225,9 +225,24 @@ exports.getAllBills = async (req, res) => {
       order: [[sortBy, sortOrder]],
     });
 
+    const studentIds = [...new Set(rows.map((row) => row.secondaryStudentId))];
+    const students = await SecondaryUser.findAll({
+      where: { id: studentIds },
+      attributes: ["id", "admissionno"],
+      raw: true,
+    });
+    const admissionNoByStudentId = new Map(
+      students.map((student) => [student.id, student.admissionno]),
+    );
+
+    const data = rows.map((row) => ({
+      ...row.toJSON(),
+      admissionNo: admissionNoByStudentId.get(row.secondaryStudentId) || null,
+    }));
+
     res.status(200).json({
       success: true,
-      data: rows,
+      data,
       pagination: {
         totalRecords: count,
         currentPage: page,
