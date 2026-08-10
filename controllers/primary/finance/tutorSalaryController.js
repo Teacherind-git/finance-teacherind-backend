@@ -316,6 +316,7 @@ exports.getAllTutorSalaries = async (req, res) => {
                 totalClasses,
                 attendedClasses,
                 missedClasses: salary.payroll.missedClasses,
+                baseSalary: salary.payroll.baseSalary,
                 grossSalary: salary.payroll.grossSalary,
                 netSalary: salary.payroll.netSalary,
 
