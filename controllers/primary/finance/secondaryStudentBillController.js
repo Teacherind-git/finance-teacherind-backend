@@ -11,7 +11,7 @@ const receiptTemplate = require("../../../templates/billReceiptTemplate");
 const { getPaginationParams } = require("../../../utils/pagination");
 const {
   getActivePackages,
-  buildBreakdown,
+  buildStudentBillBreakdown,
 } = require("../../../utils/secondaryBilling");
 
 const formatDate = (date) => {
@@ -109,7 +109,7 @@ exports.generateBill = async (req, res) => {
       totalAmount,
       perClassRate,
       primaryPackage,
-    } = buildBreakdown(subjects, packages);
+    } = await buildStudentBillBreakdown(id, subjects, packages);
 
     if (totalAmount <= 0) {
       return res.status(400).json({

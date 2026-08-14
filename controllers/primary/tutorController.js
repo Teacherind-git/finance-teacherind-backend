@@ -848,6 +848,51 @@ exports.updateTutor = async (req, res) => {
       const availabilitySlots = safeParse(updatedTutor.availabilitySlots, []);
       const teachingDetails = safeParse(updatedTutor.teachingDetails, []);
 
+      // The secondary (external) system keys subjects/syllabus by their
+      // firebase-style id, not our primary-DB numeric id, so resolve and
+      // attach those alongside the existing ids before sending them over.
+      const subjectIds = [
+        ...new Set(teachingDetails.map((item) => item.subject).filter(Boolean)),
+      ];
+      const syllabusIds = [
+        ...new Set(
+          teachingDetails.flatMap((item) => item.syllabus || []).filter(Boolean),
+        ),
+      ];
+
+      const [subjectRows, syllabusRows] = await Promise.all([
+        subjectIds.length
+          ? Subject.findAll({
+              where: { id: subjectIds },
+              attributes: ["id", "firebase_id"],
+              raw: true,
+            })
+          : [],
+        syllabusIds.length
+          ? Syllabus.findAll({
+              where: { id: syllabusIds },
+              attributes: ["id", "firebase_id"],
+              raw: true,
+            })
+          : [],
+      ]);
+
+      const subjectFirebaseIdById = new Map(
+        subjectRows.map((s) => [String(s.id), s.firebase_id]),
+      );
+      const syllabusFirebaseIdById = new Map(
+        syllabusRows.map((s) => [String(s.id), s.firebase_id]),
+      );
+
+      const teachingDetailsWithFirebaseIds = teachingDetails.map((item) => ({
+        ...item,
+        subjectFirebaseId:
+          subjectFirebaseIdById.get(String(item.subject)) || null,
+        syllabusFirebaseIds: (item.syllabus || []).map(
+          (syllabusId) => syllabusFirebaseIdById.get(String(syllabusId)) || null,
+        ),
+      }));
+
       const payload = {
         email: updatedTutor.email,
         fullName: updatedTutor.fullName,
@@ -872,7 +917,7 @@ exports.updateTutor = async (req, res) => {
               ? `${slot.fromTime} - ${slot.toTime}`
               : "",
         })),
-        teachingDetails,
+        teachingDetails: teachingDetailsWithFirebaseIds,
       };
 
       console.log("Calling secondary API...", payload);

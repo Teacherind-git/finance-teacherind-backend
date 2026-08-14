@@ -603,11 +603,18 @@ exports.updateTutorPayroll = async (req, res) => {
 
     /* =============================
        UPDATE THE SPECIFIC SALARY ENTRY BEING EDITED
+       (earnings/deductions are snapshotted here too, not just on the
+       payroll row, so this month's figures stay this month's even if
+       the payroll row is later shared/reused by another month)
     ============================== */
 
     await salary.update(
       {
         amount: netSalary,
+        earnings,
+        deductions,
+        totalEarnings,
+        totalDeductions,
         updatedBy: req.user?.id || null,
       },
       { transaction },

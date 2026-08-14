@@ -8,7 +8,7 @@ const { getPaginationParams } = require("../../utils/pagination");
 const { Op } = require("sequelize");
 const {
   getActivePackages,
-  buildBreakdown,
+  buildStudentBillBreakdown,
 } = require("../../utils/secondaryBilling");
 
 /* ================= STATUS HELPERS ================= */
@@ -233,7 +233,7 @@ exports.getStudent = async (req, res) => {
           totalAmount,
           perClassRate,
           primaryPackage,
-        } = buildBreakdown(subjects, packages);
+        } = await buildStudentBillBreakdown(id, subjects, packages);
         billing = {
           packageId: primaryPackage?.id || null,
           packageName: primaryPackage?.name || null,

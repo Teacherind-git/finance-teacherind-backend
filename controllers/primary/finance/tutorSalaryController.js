@@ -56,6 +56,21 @@ async function getLiveScheduleStats(tutorId, payrollMonth) {
   };
 }
 
+// Earnings/deductions are snapshotted directly on the tutor_salary row at
+// generation/edit time (see generateTutorSalary.js and updateTutorPayroll)
+// so each month keeps its own figures even if the payroll row it points at
+// is later shared/reused by another month. Rows created before this
+// snapshot existed have no data of their own yet, so fall back to the
+// linked payroll row for those.
+function hasOwnEarningsSnapshot(salary) {
+  return (
+    (Array.isArray(salary.earnings) && salary.earnings.length > 0) ||
+    (Array.isArray(salary.deductions) && salary.deductions.length > 0) ||
+    !!salary.totalEarnings ||
+    !!salary.totalDeductions
+  );
+}
+
 /* -----------------------------------------------------
    1. GET ALL TUTOR SALARIES
 ----------------------------------------------------- */
@@ -320,11 +335,23 @@ exports.getAllTutorSalaries = async (req, res) => {
                 grossSalary: salary.payroll.grossSalary,
                 netSalary: salary.payroll.netSalary,
 
-                deductions: parseList(salary.payroll.deductions),
-                earnings: parseList(salary.payroll.earnings),
+                deductions: parseList(
+                  hasOwnEarningsSnapshot(salary)
+                    ? salary.deductions
+                    : salary.payroll.deductions,
+                ),
+                earnings: parseList(
+                  hasOwnEarningsSnapshot(salary)
+                    ? salary.earnings
+                    : salary.payroll.earnings,
+                ),
 
-                totalDeductions: salary.payroll.totalDeductions,
-                totalEarnings: salary.payroll.totalEarnings,
+                totalDeductions: hasOwnEarningsSnapshot(salary)
+                  ? salary.totalDeductions
+                  : salary.payroll.totalDeductions,
+                totalEarnings: hasOwnEarningsSnapshot(salary)
+                  ? salary.totalEarnings
+                  : salary.payroll.totalEarnings,
               }
             : null,
         };
@@ -437,11 +464,23 @@ exports.downloadReceipt = async (req, res) => {
           year: "numeric",
         })
       : "";
+
+    const useOwnSnapshot = hasOwnEarningsSnapshot(salary);
+    const earningsRaw = useOwnSnapshot
+      ? salary.earnings
+      : salary.payroll?.earnings;
+    const deductionsRaw = useOwnSnapshot
+      ? salary.deductions
+      : salary.payroll?.deductions;
+    const totalDeductionsValue = useOwnSnapshot
+      ? salary.totalDeductions
+      : salary.payroll?.totalDeductions;
+
     // Earnings rows dynamic
-    const earningsArr = Array.isArray(salary.payroll?.earnings)
-      ? salary.payroll.earnings
-      : typeof salary.payroll?.earnings === "string"
-        ? JSON.parse(salary.payroll.earnings || "[]")
+    const earningsArr = Array.isArray(earningsRaw)
+      ? earningsRaw
+      : typeof earningsRaw === "string"
+        ? JSON.parse(earningsRaw || "[]")
         : [];
     const earningsHtml = earningsArr
       .map((e) => {
@@ -463,10 +502,10 @@ exports.downloadReceipt = async (req, res) => {
       .join("");
 
     // Deductions rows dynamic
-    const deductionsArr = Array.isArray(salary.payroll?.deductions)
-      ? salary.payroll.deductions
-      : typeof salary.payroll?.deductions === "string"
-        ? JSON.parse(salary.payroll.deductions || "[]")
+    const deductionsArr = Array.isArray(deductionsRaw)
+      ? deductionsRaw
+      : typeof deductionsRaw === "string"
+        ? JSON.parse(deductionsRaw || "[]")
         : [];
 
     const deductionsHtml = deductionsArr
@@ -531,8 +570,10 @@ exports.downloadReceipt = async (req, res) => {
       position: "Tutor",
       month,
       totalClasses: salary.payroll?.attendedClasses || 0,
-      totalDeductions: salary.payroll?.totalDeductions,
-      totalEarnings: salary.totalEarnings,
+      totalDeductions: totalDeductionsValue,
+      totalEarnings: useOwnSnapshot
+        ? salary.totalEarnings
+        : salary.payroll?.totalEarnings,
       grossSalary: salary.payroll?.grossSalary || salary.amount,
       basePay: salary.payroll?.baseSalary,
       gstPercent: 0,

@@ -26,6 +26,27 @@ const TutorSalary = sequelizePrimary.define(
       allowNull: false,
     },
     amount: { type: DataTypes.FLOAT, allowNull: false },
+
+    // Snapshot of this month's earnings/deductions, taken at generation/edit
+    // time. Read from here (not through `payroll`) so a `tutor_payrolls` row
+    // that ends up shared/reused across months can't leak another month's
+    // figures into this one.
+    earnings: {
+      type: DataTypes.JSON,
+      defaultValue: [],
+    },
+    totalEarnings: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0,
+    },
+    deductions: {
+      type: DataTypes.JSON,
+      defaultValue: [],
+    },
+    totalDeductions: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0,
+    },
     salaryDate: { type: DataTypes.DATE, allowNull: false },
     dueDate: { type: DataTypes.DATE, allowNull: false },
     finalDueDate: { type: DataTypes.DATE, allowNull: false },
