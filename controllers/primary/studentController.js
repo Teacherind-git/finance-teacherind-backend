@@ -1,15 +1,58 @@
 const Student = require("../../models/primary/Student");
 const StudentDetail = require("../../models/primary/StudentDetail");
 const SecondaryUser = require("../../models/secondary/User");
+const SubjectPlan = require("../../models/secondary/SubjectPlan");
 const { sequelizePrimary } = require("../../config/db");
 const logger = require("../../utils/logger");
 const axios = require("axios");
 const { getPaginationParams } = require("../../utils/pagination");
-const { Op } = require("sequelize");
+const { Op, fn, col } = require("sequelize");
 const {
   getActivePackages,
   buildStudentBillBreakdown,
 } = require("../../utils/secondaryBilling");
+
+/* ================= PLAN HELPERS ================= */
+// Whole days between today and expiry_date (negative once past expiry)
+const getDaysUntilExpiry = (expiryDate) => {
+  if (!expiryDate) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = new Date(expiryDate);
+
+  return Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
+};
+
+// Status of a student's nearest active (not-ended) subject plan, derived from expiry_date
+const getPlanStatus = (expiryDate) => {
+  const diffDays = getDaysUntilExpiry(expiryDate);
+  if (diffDays === null) return "No Plan";
+
+  if (diffDays < 0) return "Expired";
+  if (diffDays <= 7) return "Expiring Soon";
+  return "Active";
+};
+
+// Fetch the nearest upcoming expiry among each student's active plans (ended_at IS NULL)
+const getNearestPlanExpiryMap = async (studentIds) => {
+  if (!studentIds.length) return {};
+
+  const plans = await SubjectPlan.findAll({
+    where: { student_id: { [Op.in]: studentIds }, ended_at: null },
+    attributes: [
+      "student_id",
+      [fn("MIN", col("expiry_date")), "nearestExpiry"],
+    ],
+    group: ["student_id"],
+    raw: true,
+  });
+
+  return plans.reduce((acc, plan) => {
+    acc[plan.student_id] = plan.nearestExpiry;
+    return acc;
+  }, {});
+};
 
 /* ================= STATUS HELPERS ================= */
 // Legacy `users.status`: 0 = Left, 1 = Active, 2 = Course Completed, 3 = Inactive
@@ -157,6 +200,10 @@ exports.getAllStudents = async (req, res) => {
       raw: true,
     });
 
+    const planExpiryMap = await getNearestPlanExpiryMap(
+      rows.map((student) => student.id),
+    );
+
     const formattedStudents = rows.map((student) => ({
       id: student.id,
       fullName: student.fullname,
@@ -164,6 +211,9 @@ exports.getAllStudents = async (req, res) => {
       phone: student.phone,
       status: formatStudentStatus(student.status),
       admissionNo: student.admissionno,
+      planExpiry: planExpiryMap[student.id] || null,
+      planStatus: getPlanStatus(planExpiryMap[student.id]),
+      planDaysLeft: getDaysUntilExpiry(planExpiryMap[student.id]),
     }));
 
     res.status(200).json({
@@ -221,6 +271,32 @@ exports.getStudent = async (req, res) => {
       });
     }
 
+    let plans = [];
+    try {
+      plans = await SubjectPlan.findAll({
+        where: { student_id: id },
+        order: [["started_at", "DESC"]],
+        raw: true,
+      });
+    } catch (planError) {
+      logger.error("Failed to fetch student subject plans", {
+        studentId: id,
+        error: planError.message,
+      });
+    }
+
+    plans = plans.map((plan) => ({
+      ...plan,
+      daysLeft: getDaysUntilExpiry(plan.expiry_date),
+    }));
+
+    const activeExpiries = plans
+      .filter((plan) => !plan.ended_at && plan.expiry_date)
+      .map((plan) => plan.expiry_date);
+    const nearestPlanExpiry = activeExpiries.length
+      ? activeExpiries.sort()[0]
+      : null;
+
     let billing = null;
     const subjects = subjectDetails?.data?.subjects;
     if (subjects?.length) {
@@ -257,6 +333,10 @@ exports.getStudent = async (req, res) => {
         admissionNo: student.admissionno,
         subjectDetails,
         billing,
+        plans,
+        planExpiry: nearestPlanExpiry,
+        planStatus: getPlanStatus(nearestPlanExpiry),
+        planDaysLeft: getDaysUntilExpiry(nearestPlanExpiry),
       },
     });
   } catch (error) {
