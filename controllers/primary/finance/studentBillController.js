@@ -12,6 +12,7 @@ const { Op } = require("sequelize");
 const moment = require("moment");
 const receiptTemplate = require("../../../templates/billReceiptTemplate");
 const { toWords } = require("number-to-words");
+const { getSessionBreakdown } = require("../../../utils/studentBilling");
 
 exports.getStudentBills = async (req, res) => {
   try {
@@ -217,7 +218,7 @@ exports.downloadReceipt = async (req, res) => {
     /* --------------------------------
        AMOUNT IN WORDS
     --------------------------------- */
-    const amountInWords = toWords(bill.amount); // use your util
+    const amountInWords = toWords(Math.round(bill.amount)); // use your util
 
     /* --------------------------------
        BUILD RECEIPT DATA (ORIGINAL)
@@ -438,24 +439,24 @@ const getInvoiceData = async (studentId) => {
   /**
    * 2️⃣ Convert packages into invoice items
    */
-  const items = activeDetails.map((detail, index) => {
-    const pkg = detail.package;
-    const totalSessions =
-      (pkg.classesPerMonth || 0) +
-      (pkg.growthSession || 0) +
-      (pkg.questionToolExam || 0);
+  const items = activeDetails.map((detail) => {
+    const { classes, growth, examCount, totalSessions, perSessionRate } =
+      getSessionBreakdown(detail);
 
-    // Build description text
-    const description = `${totalSessions} sessions = ${pkg.classesPerMonth} classes + ${pkg.growthSession} growth + ${pkg.questionToolExam} exams`;
+    const discount = Number(detail.discount || 0);
+    const amount = totalSessions * perSessionRate - discount;
+
+    // Build description text (exam count = plan months * 2)
+    const description = `${totalSessions} sessions = ${classes} classes + ${growth} growth + ${examCount} exams`;
 
     return {
       name: detail.package.name,
       description, // ⬅️ Added here
       sac: "999299",
-      qty: detail.duration + " MON",
-      rate: detail.packagePrice,
+      qty: `${totalSessions} SES`,
+      rate: Number(perSessionRate.toFixed(2)),
       discount: detail.discount,
-      amount: detail.totalPrice,
+      amount: Number(amount.toFixed(2)),
     };
   });
 
@@ -478,7 +479,7 @@ const getInvoiceData = async (studentId) => {
     totalDiscount,
     receivedAmount: bill.paidAmount || 0,
 
-    amountInWords: toWords(subtotal),
+    amountInWords: toWords(Math.round(subtotal)),
 
     bank: {
       name: "teacherInd Loro Talento Pvt Ltd",

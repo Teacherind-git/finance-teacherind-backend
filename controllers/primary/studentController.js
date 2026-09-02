@@ -10,6 +10,7 @@ const { Op, fn, col } = require("sequelize");
 const {
   getActivePackages,
   buildStudentBillBreakdown,
+  parsePlanMonths,
 } = require("../../utils/secondaryBilling");
 
 /* ================= PLAN HELPERS ================= */
@@ -290,12 +291,19 @@ exports.getStudent = async (req, res) => {
       daysLeft: getDaysUntilExpiry(plan.expiry_date),
     }));
 
-    const activeExpiries = plans
-      .filter((plan) => !plan.ended_at && plan.expiry_date)
+    const activePlans = plans.filter((plan) => !plan.ended_at);
+
+    const activeExpiries = activePlans
+      .filter((plan) => plan.expiry_date)
       .map((plan) => plan.expiry_date);
     const nearestPlanExpiry = activeExpiries.length
       ? activeExpiries.sort()[0]
       : null;
+
+    // Exam sessions are billed at 2 per plan month; use the longest active plan.
+    const planMonths = activePlans.length
+      ? Math.max(...activePlans.map((plan) => parsePlanMonths(plan.plan_type)))
+      : 1;
 
     let billing = null;
     const subjects = subjectDetails?.data?.subjects;
@@ -309,7 +317,7 @@ exports.getStudent = async (req, res) => {
           totalAmount,
           perClassRate,
           primaryPackage,
-        } = await buildStudentBillBreakdown(id, subjects, packages);
+        } = await buildStudentBillBreakdown(id, subjects, packages, planMonths);
         billing = {
           packageId: primaryPackage?.id || null,
           packageName: primaryPackage?.name || null,

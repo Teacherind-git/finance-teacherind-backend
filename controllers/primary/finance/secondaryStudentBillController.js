@@ -4,6 +4,7 @@ const puppeteer = require("puppeteer");
 const { toWords } = require("number-to-words");
 const { Op } = require("sequelize");
 const SecondaryUser = require("../../../models/secondary/User");
+const SubjectPlan = require("../../../models/secondary/SubjectPlan");
 const SecondaryStudentBill = require("../../../models/primary/SecondaryStudentBill");
 const logger = require("../../../utils/logger");
 const invoiceTemplate = require("../../../templates/invoiceTemplate");
@@ -12,6 +13,7 @@ const { getPaginationParams } = require("../../../utils/pagination");
 const {
   getActivePackages,
   buildStudentBillBreakdown,
+  parsePlanMonths,
 } = require("../../../utils/secondaryBilling");
 
 const formatDate = (date) => {
@@ -102,6 +104,27 @@ exports.generateBill = async (req, res) => {
       });
     }
 
+    // Exam sessions = 2 per plan month; use the longest active plan.
+    let planMonths = 1;
+    try {
+      const plans = await SubjectPlan.findAll({
+        where: { student_id: id },
+        attributes: ["plan_type", "ended_at"],
+        raw: true,
+      });
+      const activePlans = plans.filter((plan) => !plan.ended_at);
+      if (activePlans.length) {
+        planMonths = Math.max(
+          ...activePlans.map((plan) => parsePlanMonths(plan.plan_type)),
+        );
+      }
+    } catch (planError) {
+      logger.error("Failed to fetch subject plans for billing", {
+        studentId: id,
+        error: planError.message,
+      });
+    }
+
     const {
       breakdown,
       totalClasses,
@@ -109,7 +132,7 @@ exports.generateBill = async (req, res) => {
       totalAmount,
       perClassRate,
       primaryPackage,
-    } = await buildStudentBillBreakdown(id, subjects, packages);
+    } = await buildStudentBillBreakdown(id, subjects, packages, planMonths);
 
     if (totalAmount <= 0) {
       return res.status(400).json({
@@ -402,14 +425,27 @@ const getSecondaryInvoiceData = async (billId) => {
   const subjects = bill.breakdown?.subjects || [];
   const examFee = bill.breakdown?.examFee;
 
+  const packageName = bill.breakdown?.packageName || null;
+
   const items = subjects.map((s) => {
-    const totalUnits = s.classesScheduled + s.extraClasses;
-    const description = s.extraClasses
-      ? `${s.classesScheduled} classes + ${s.extraClasses} extra classes (${s.packageName})`
-      : `${s.classesScheduled} classes (${s.packageName})`;
+    // Billed base is the package quota; fall back to classesScheduled for
+    // bills generated before this field existed.
+    const packageClasses =
+      s.packageClasses != null ? s.packageClasses : s.classesScheduled;
+    const extraClasses = s.extraClasses || 0;
+    const totalUnits = packageClasses + extraClasses;
+
+    const pkg = s.packageName || packageName;
+    const name = pkg
+      ? `${pkg} ${s.subjectName}`.toUpperCase()
+      : String(s.subjectName || "").toUpperCase();
+
+    const description = extraClasses
+      ? `${totalUnits} SESSIONS = ${packageClasses} CLASSES + ${extraClasses} EXTRA CLASSES`
+      : `${packageClasses} CLASSES`;
 
     return {
-      name: s.subjectName,
+      name,
       description,
       sac: "999299",
       qty: `${totalUnits} SESS`,

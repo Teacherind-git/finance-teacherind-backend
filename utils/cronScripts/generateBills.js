@@ -11,9 +11,11 @@ const sequelize = require("../../config/database");
 const Student = require("../../models/primary/Student");
 const StudentDetail = require("../../models/primary/StudentDetail");
 const StudentBill = require("../../models/primary/StudentBill");
+const Package = require("../../models/primary/Package");
 const PrimaryUser = require("../../models/primary/User");
 
 const cronLogger = require("../cronLogger");
+const { computeDetailBillAmount } = require("../studentBilling");
 
 // -----------------------------------------------------------------------------
 // LOGGER
@@ -114,6 +116,7 @@ async function generateBills() {
           model: StudentDetail,
           as: "details",
           required: true,
+          include: [{ model: Package, as: "package" }],
         },
       ],
     });
@@ -171,8 +174,10 @@ async function generateBills() {
         let earliestStartDate = null;
 
         for (const detail of student.details) {
-          const price =
-            Number(detail.totalPrice || detail.packagePrice || 0);
+          // New rule: totalSessions * perSessionRate - discount
+          // (perSessionRate = packagePrice / legacy session count,
+          //  exam sessions = duration * 2)
+          const price = computeDetailBillAmount(detail);
 
           totalAmount += price;
 

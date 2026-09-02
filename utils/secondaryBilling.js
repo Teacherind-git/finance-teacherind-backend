@@ -6,7 +6,27 @@ const FeeStructure = require("../models/primary/FeeStructure");
 const SecondaryClass = require("../models/secondary/Class");
 const logger = require("./logger");
 
-const EXTRA_EXAM_SESSIONS = 2;
+// Exam sessions are billed at 2 per plan month (e.g. a "3_month" plan => 6),
+// replacing the old fixed count of 2.
+const EXAMS_PER_MONTH = 2;
+
+// Turns a SubjectPlan.plan_type string ("3_month", "1_month", "6_month",
+// "yearly", ...) into a month count. Falls back to 1 when unparseable.
+function parsePlanMonths(planType) {
+  if (!planType) return 1;
+
+  const str = String(planType).toLowerCase().trim();
+
+  const num = parseInt(str, 10);
+  if (!isNaN(num) && num > 0) return num;
+
+  if (str.includes("year") || str.includes("annual")) return 12;
+  if (str.includes("half")) return 6;
+  if (str.includes("quarter")) return 3;
+  if (str.includes("month")) return 1;
+
+  return 1;
+}
 
 async function getActivePackages() {
   return Package.findAll({
@@ -116,7 +136,7 @@ function findNearestPackage(packages, classesCount) {
   }, packages[0]);
 }
 
-function buildBreakdown(subjects, packages, feeRates = {}) {
+function buildBreakdown(subjects, packages, feeRates = {}, planMonths = 1) {
   const totalClassesForPackageMatch = subjects.reduce(
     (sum, s) =>
       sum +
@@ -138,6 +158,9 @@ function buildBreakdown(subjects, packages, feeRates = {}) {
 
   const breakdown = subjects.map((s) => {
     const classesScheduled = s.classes_scheduled_current_month || 0;
+    // Bill the package's fixed monthly class quota, not the classes actually
+    // scheduled this month. Extra classes are still charged on top.
+    const packageClasses = s.package_classes || 0;
     const extraClasses = s.extra_classes_current_month || 0;
     const feePerHour = feeRates[s.subject_id] || 0;
 
@@ -145,23 +168,25 @@ function buildBreakdown(subjects, packages, feeRates = {}) {
       ? getSessionRate(primaryPackage, feePerHour, comboMultiplier) || 0
       : 0;
 
+    const billedClasses = packageClasses + extraClasses;
+
     return {
       subjectId: s.subject_id,
       subjectName: s.subject_name,
       classesScheduled,
+      packageClasses,
+      billedClasses,
       extraClasses,
       packageId: primaryPackage?.id || null,
       packageName: primaryPackage?.name || null,
       perClassRate: Number(perClassRate.toFixed(2)),
       extraClassAmount: Number((extraClasses * perClassRate).toFixed(2)),
-      amount: Number(
-        ((classesScheduled + extraClasses) * perClassRate).toFixed(2),
-      ),
+      amount: Number((billedClasses * perClassRate).toFixed(2)),
     };
   });
 
   const totalClasses = breakdown.reduce(
-    (sum, b) => sum + b.classesScheduled + b.extraClasses,
+    (sum, b) => sum + b.billedClasses,
     0,
   );
 
@@ -175,10 +200,14 @@ function buildBreakdown(subjects, packages, feeRates = {}) {
   const perClassRate =
     totalClasses > 0 ? Number((classesAmount / totalClasses).toFixed(2)) : 0;
 
+  // Exam count = plan months * 2 (max across the student's active plans),
+  // not a fixed 2.
+  const examSessions = Math.max(1, Number(planMonths) || 1) * EXAMS_PER_MONTH;
+
   const examFee = {
-    sessions: EXTRA_EXAM_SESSIONS,
+    sessions: examSessions,
     rate: perClassRate,
-    amount: Number((EXTRA_EXAM_SESSIONS * perClassRate).toFixed(2)),
+    amount: Number((examSessions * perClassRate).toFixed(2)),
   };
 
   const totalAmount = Number((classesAmount + examFee.amount).toFixed(2));
@@ -197,7 +226,12 @@ function buildBreakdown(subjects, packages, feeRates = {}) {
 // Convenience wrapper: resolves the student's class range + per-subject fee
 // rates, then builds the billing breakdown. Falls back to package-only
 // pricing (with a warning) when the student's class can't be resolved.
-async function buildStudentBillBreakdown(secondaryStudentId, subjects, packages) {
+async function buildStudentBillBreakdown(
+  secondaryStudentId,
+  subjects,
+  packages,
+  planMonths = 1,
+) {
   const classRange = await getStudentClassRange(secondaryStudentId);
 
   if (!classRange) {
@@ -209,10 +243,12 @@ async function buildStudentBillBreakdown(secondaryStudentId, subjects, packages)
   const subjectIds = [...new Set(subjects.map((s) => s.subject_id))];
   const feeRates = await getFeeRates(subjectIds, classRange?.id);
 
-  return buildBreakdown(subjects, packages, feeRates);
+  return buildBreakdown(subjects, packages, feeRates, planMonths);
 }
 
 module.exports = {
+  EXAMS_PER_MONTH,
+  parsePlanMonths,
   getActivePackages,
   getStudentClassRange,
   getFeeRates,
