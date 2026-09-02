@@ -427,35 +427,64 @@ const getSecondaryInvoiceData = async (billId) => {
 
   const packageName = bill.breakdown?.packageName || null;
 
-  const items = subjects.map((s) => {
+  // The bill stores exams as one combined charge; on the invoice we fold it
+  // into each subject line instead of a separate "Question Tool Exams" row.
+  // Split it across the subject lines so the invoice total is unchanged.
+  const subjectCount = subjects.length;
+  const hasExam = examFee?.amount > 0 && subjectCount > 0;
+  const totalExamSessions = hasExam ? examFee.sessions || 0 : 0;
+  const totalExamAmount = hasExam ? examFee.amount || 0 : 0;
+
+  let examSessionsLeft = totalExamSessions;
+  let examAmountLeft = totalExamAmount;
+
+  const items = subjects.map((s, idx) => {
+    const isLast = idx === subjectCount - 1;
+
     // Billed base is the package quota; fall back to classesScheduled for
     // bills generated before this field existed.
     const packageClasses =
       s.packageClasses != null ? s.packageClasses : s.classesScheduled;
     const extraClasses = s.extraClasses || 0;
-    const totalUnits = packageClasses + extraClasses;
+    const classUnits = packageClasses + extraClasses;
+
+    const examSessions = isLast
+      ? examSessionsLeft
+      : Math.floor(totalExamSessions / subjectCount);
+    const examAmount = isLast
+      ? Number(examAmountLeft.toFixed(2))
+      : Number((totalExamAmount / subjectCount).toFixed(2));
+    examSessionsLeft -= examSessions;
+    examAmountLeft -= examAmount;
+
+    const totalSessions = classUnits + examSessions;
 
     const pkg = s.packageName || packageName;
     const name = pkg
       ? `${pkg} ${s.subjectName}`.toUpperCase()
       : String(s.subjectName || "").toUpperCase();
 
-    const description = extraClasses
-      ? `${totalUnits} SESSIONS = ${packageClasses} CLASSES + ${extraClasses} EXTRA CLASSES`
-      : `${packageClasses} CLASSES`;
+    const parts = [`${packageClasses} CLASSES`];
+    if (extraClasses) parts.push(`${extraClasses} EXTRA CLASSES`);
+    if (examSessions) parts.push(`${examSessions} AI EXAMS`);
+    const description =
+      parts.length > 1
+        ? `${totalSessions} SESSIONS = ${parts.join(" + ")}`
+        : `${packageClasses} CLASSES`;
 
     return {
       name,
       description,
       sac: "999299",
-      qty: `${totalUnits} SESS`,
+      qty: `${totalSessions} SESS`,
       rate: s.perClassRate,
       discount: 0,
-      amount: s.amount,
+      amount: Number(((s.amount || 0) + examAmount).toFixed(2)),
     };
   });
 
-  if (examFee?.amount > 0) {
+  // Fallback: exams exist but there are no subject lines to fold them into.
+  if (examFee?.amount > 0 && subjectCount === 0) {
     items.push({
       name: "Question Tool Exams",
       description: `${examFee.sessions} exam sessions`,
