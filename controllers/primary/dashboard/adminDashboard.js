@@ -1,7 +1,7 @@
 const { Op, fn, col } = require("sequelize");
 
-const Student = require("../../../models/primary/Student");
 const StudentBill = require("../../../models/primary/StudentBill");
+const SecondaryStudentBill = require("../../../models/primary/SecondaryStudentBill");
 const Expense = require("../../../models/primary/Expense");
 
 const TutorPayroll = require("../../../models/primary/TutorPayroll");
@@ -70,8 +70,9 @@ exports.getDashboard = async (req, res) => {
     const dateCondition = startDate && endDate ? { [Op.between]: [startDate, endDate] } : undefined;
 
     /* ---------------- ACTIVE COUNTS ---------------- */
-    const activeStudents = await Student.count({
-      where: { isDeleted: false, ...(dateCondition && { createdAt: dateCondition }) },
+    // Active students come from the secondary DB (users with role = 4, status = 1)
+    const activeStudents = await SecondaryUser.count({
+      where: { role: 4, status: 1, ...(dateCondition && { created_at: dateCondition }) },
     });
 
     const activeTutors = await SecondaryUser.count({
@@ -89,14 +90,19 @@ exports.getDashboard = async (req, res) => {
     const activeStaff = primaryStaff + secondaryStaff;
 
     /* ---------------- REVENUE ---------------- */
-    const totalRevenue =
-      (await StudentBill.sum("amount", {
-        where: {
-          status: "Paid",
-          isDeleted: false,
-          ...(dateCondition && { billDate: dateCondition }),
-        },
-      })) || 0;
+    // Total billed = amount across both primary and secondary student bills
+    // (matches the finance summary endpoint)
+    const revenueWhere = {
+      isDeleted: false,
+      ...(dateCondition && { billDate: dateCondition }),
+    };
+
+    const [primaryRevenue, secondaryRevenue] = await Promise.all([
+      StudentBill.sum("amount", { where: revenueWhere }),
+      SecondaryStudentBill.sum("amount", { where: revenueWhere }),
+    ]);
+
+    const totalRevenue = (primaryRevenue || 0) + (secondaryRevenue || 0);
 
     /* ---------------- EXPENSES ---------------- */
     const totalExpenses =
@@ -136,21 +142,43 @@ exports.getDashboard = async (req, res) => {
       })) || 0;
 
     /* ---------------- REVENUE CHART (MONTHLY) ---------------- */
-    const revenueChart = await StudentBill.findAll({
+    // Billed amount per month, combined across both bill tables
+    const monthlyChartOptions = {
       attributes: [
         [fn("MONTH", col("billDate")), "monthNumber"],
         [fn("MONTHNAME", col("billDate")), "month"],
         [fn("SUM", col("amount")), "revenue"],
       ],
-      where: {
-        status: "Paid",
-        isDeleted: false,
-        ...(dateCondition && { billDate: dateCondition }),
-      },
+      where: revenueWhere,
       group: [fn("MONTH", col("billDate")), fn("MONTHNAME", col("billDate"))],
       order: [[fn("MONTH", col("billDate")), "ASC"]],
       raw: true,
-    });
+    };
+
+    const [primaryMonthly, secondaryMonthly] = await Promise.all([
+      StudentBill.findAll(monthlyChartOptions),
+      SecondaryStudentBill.findAll(monthlyChartOptions),
+    ]);
+
+    const revenueByMonth = new Map();
+    for (const row of [...primaryMonthly, ...secondaryMonthly]) {
+      const key = row.monthNumber;
+      const existing = revenueByMonth.get(key);
+      const revenue = Number(row.revenue) || 0;
+      if (existing) {
+        existing.revenue += revenue;
+      } else {
+        revenueByMonth.set(key, {
+          monthNumber: Number(key),
+          month: row.month,
+          revenue,
+        });
+      }
+    }
+
+    const revenueChart = [...revenueByMonth.values()].sort(
+      (a, b) => a.monthNumber - b.monthNumber,
+    );
 
     /* ---------------- EXPENSE CATEGORY ---------------- */
     const expenseCategory = await Expense.findAll({

@@ -1,5 +1,6 @@
 const { Op, fn, col } = require("sequelize");
 const StudentBill = require("../../../models/primary/StudentBill");
+const SecondaryStudentBill = require("../../../models/primary/SecondaryStudentBill");
 const Expense = require("../../../models/primary/Expense");
 const StaffSalary = require("../../../models/primary/StaffSalary");
 const TutorSalary = require("../../../models/primary/TutorSalary");
@@ -17,28 +18,41 @@ exports.getFinanceSummary = async (req, res) => {
       : {};
 
     /* ===================== REVENUE ===================== */
-    const [revenueAmount, revenueCount] = await Promise.all([
-      StudentBill.sum("amount", {
-        where: {
-          isDeleted: false,
-          ...(dateFilter && { billDate: dateFilter }),
-        },
-      }),
-      StudentBill.count({
-        where: {
-          isDeleted: false,
-          ...(dateFilter && { billDate: dateFilter }),
-        },
-      }),
+    // Revenue spans both primary and secondary student bills
+    const revenueWhere = {
+      isDeleted: false,
+      ...(dateFilter && { billDate: dateFilter }),
+    };
+
+    const [
+      primaryRevenueAmount,
+      primaryRevenueCount,
+      secondaryRevenueAmount,
+      secondaryRevenueCount,
+    ] = await Promise.all([
+      StudentBill.sum("amount", { where: revenueWhere }),
+      StudentBill.count({ where: revenueWhere }),
+      SecondaryStudentBill.sum("amount", { where: revenueWhere }),
+      SecondaryStudentBill.count({ where: revenueWhere }),
     ]);
 
+    const revenueAmount =
+      (primaryRevenueAmount || 0) + (secondaryRevenueAmount || 0);
+    const revenueCount = primaryRevenueCount + secondaryRevenueCount;
+
     const prevRevenueAmount = dateFilter
-      ? await StudentBill.sum("amount", {
+      ? ((await StudentBill.sum("amount", {
           where: {
             isDeleted: false,
             billDate: { [Op.between]: [prevStart, prevEnd] },
           },
-        })
+        })) || 0) +
+        ((await SecondaryStudentBill.sum("amount", {
+          where: {
+            isDeleted: false,
+            billDate: { [Op.between]: [prevStart, prevEnd] },
+          },
+        })) || 0)
       : 0;
 
     const revenuePercentage = prevRevenueAmount
@@ -199,16 +213,19 @@ exports.searchFinanceTransactions = async (req, res) => {
 
     /* ===================== FETCH DATA ===================== */
 
-    const bills =
+    const billWhere = {
+      isDeleted: false,
+      ...(status && { status }),
+      ...(dateRange && { billDate: dateRange }),
+    };
+
+    const [bills, secondaryBills] =
       type && type !== "Revenue"
-        ? []
-        : await StudentBill.findAll({
-            where: {
-              isDeleted: false,
-              ...(status && { status }),
-              ...(dateRange && { billDate: dateRange }),
-            },
-          });
+        ? [[], []]
+        : await Promise.all([
+            StudentBill.findAll({ where: billWhere }),
+            SecondaryStudentBill.findAll({ where: billWhere }),
+          ]);
 
     const expenses =
       type && type !== "Expense"
@@ -245,6 +262,7 @@ exports.searchFinanceTransactions = async (req, res) => {
 
     const createdByIds = [
       ...bills.map((b) => b.createdBy),
+      ...secondaryBills.map((b) => b.createdBy),
       ...expenses.map((e) => e.createdBy),
       ...staffSalaries.map((s) => s.createdBy),
       ...tutorSalaries.map((t) => t.createdBy),
@@ -276,6 +294,18 @@ exports.searchFinanceTransactions = async (req, res) => {
 
     let transactions = [
       ...bills.map((b) => ({
+        transactionId: b.invoiceId,
+        date: b.billDate,
+        type: "Revenue",
+        category: "Student Fee",
+        description: `Invoice ${b.invoiceId}`,
+        amount: b.amount,
+        status: b.status,
+        department: "Academics",
+        createdBy: creatorMap[b.createdBy] || null,
+      })),
+
+      ...secondaryBills.map((b) => ({
         transactionId: b.invoiceId,
         date: b.billDate,
         type: "Revenue",

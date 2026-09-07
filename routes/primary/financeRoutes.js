@@ -6,12 +6,12 @@ const { protect, authorizeRoles } = require("../../middlewares/authMiddleware");
 router.use(protect);
 router.get(
   "/summary",
-  authorizeRoles("SuperAdmin"),
+  authorizeRoles("SuperAdmin", "Admin"),
   financeController.getFinanceSummary
 );
 router.post(
   "/transactions",
-  authorizeRoles("SuperAdmin", "User"),
+  authorizeRoles("SuperAdmin", "Admin", "User"),
   financeController.searchFinanceTransactions
 );
 

@@ -215,8 +215,10 @@ exports.getFeeManagementSummary = async (req, res) => {
   try {
     logger.info("Fetching fee management summary");
 
-    const feeStructureCount = await FeeStructure.count();
-    const packageCount = await Package.count();
+    const feeStructureCount = await FeeStructure.count({
+      where: { isDeleted: false },
+    });
+    const packageCount = await Package.count({ where: { isDeleted: false } });
 
     const tutorStats = {
       totalClasses: 100,
