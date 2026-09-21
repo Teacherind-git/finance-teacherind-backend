@@ -6,7 +6,7 @@ const { sequelizePrimary } = require("../../config/db");
 const logger = require("../../utils/logger");
 const axios = require("axios");
 const { getPaginationParams } = require("../../utils/pagination");
-const { Op, fn, col } = require("sequelize");
+const { Op, fn, col, literal } = require("sequelize");
 const {
   getActivePackages,
   buildStudentBillBreakdown,
@@ -167,7 +167,7 @@ exports.getAllStudents = async (req, res) => {
 
     const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
       req,
-      ["id", "fullname", "email", "status", "admissionno"],
+      ["id", "fullname", "email", "status", "admissionno", "planExpiry"],
       "id",
     );
 
@@ -192,12 +192,24 @@ exports.getAllStudents = async (req, res) => {
       whereCondition.status = STATUS_FILTER_MAP[status];
     }
 
+    const order =
+      sortBy === "planExpiry"
+        ? [
+            [
+              literal(
+                "(SELECT MIN(expiry_date) FROM subject_plans AS plan_sort WHERE plan_sort.student_id = user.id AND plan_sort.ended_at IS NULL)",
+              ),
+              sortOrder,
+            ],
+          ]
+        : [[sortBy, sortOrder]];
+
     const { count, rows } = await SecondaryUser.findAndCountAll({
       where: whereCondition,
       attributes: ["id", "fullname", "email", "phone", "status", "admissionno"],
       limit,
       offset,
-      order: [[sortBy, sortOrder]],
+      order,
       raw: true,
     });
 

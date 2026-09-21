@@ -38,6 +38,18 @@ cron.schedule("0 * * * *", () => {
   console.log("🔥 Cron is working:", new Date().toLocaleString());
 });
 
+cron.schedule(
+  "0 0 * * *",
+  async () => {
+    const createPlanExpiryNotifications = require("./cronScripts/createPlanExpiryNotifications");
+    await safeRun(
+      createPlanExpiryNotifications,
+      "createPlanExpiryNotifications",
+    );
+  },
+  { timezone: "Asia/Kolkata" },
+);
+
 /**
  * 📅 7th - Generate Salaries
  */
