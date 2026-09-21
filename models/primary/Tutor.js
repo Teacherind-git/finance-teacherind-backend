@@ -223,6 +223,17 @@ const Tutor = sequelizePrimary.define(
       },
     },
 
+    demoClassLink: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      validate: {
+        isUrl: {
+          protocols: ["http", "https"],
+          require_protocol: true,
+        },
+      },
+    },
+
     // ======================================================
     // ADDITIONAL DETAILS
     // ======================================================

@@ -44,6 +44,8 @@ exports.createTutor = async (req, res) => {
       data.profilePhoto = `/uploads/profile/${req.files.profilePhoto[0].filename}`;
     }
 
+    data.demoClassLink = data.demoClassLink?.trim() || null;
+
     // ======================================================
     // 1. CREATE IN PRIMARY DB FIRST
     // ======================================================
@@ -759,6 +761,8 @@ exports.updateTutor = async (req, res) => {
       ...req.body,
       updatedBy: req.user?.id || null,
     };
+
+    updateData.demoClassLink = updateData.demoClassLink?.trim() || null;
 
     // ============================================
     // PARSE JSON FIELDS
