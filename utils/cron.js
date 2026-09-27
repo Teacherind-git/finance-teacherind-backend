@@ -30,7 +30,7 @@ const safeRun = async (fn, name, timeoutMs = 60000) => {
 
     logger.info(`✅ [${time}] Completed ${name}`);
   } catch (err) {
-    logger.error(`❌ [${time}] Error in ${name}: ${err.message}`);
+    logger.error(`❌ [${time}] Error in ${name}: ${err.stack || err.message}`);
   }
 };
 
@@ -38,17 +38,22 @@ cron.schedule("0 * * * *", () => {
   console.log("🔥 Cron is working:", new Date().toLocaleString());
 });
 
-cron.schedule(
-  "0 0 * * *",
-  async () => {
-    const createPlanExpiryNotifications = require("./cronScripts/createPlanExpiryNotifications");
-    await safeRun(
-      createPlanExpiryNotifications,
-      "createPlanExpiryNotifications",
-    );
-  },
-  { timezone: "Asia/Kolkata" },
-);
+/**
+ * 🔔 Plan expiry notifications
+ * Runs hourly and once on startup, so a server that was down at midnight
+ * still catches up. Re-runs are safe: notifications are unique per
+ * user/plan/day.
+ */
+const runPlanExpiryNotifications = () => {
+  const createPlanExpiryNotifications = require("./cronScripts/createPlanExpiryNotifications");
+  return safeRun(createPlanExpiryNotifications, "createPlanExpiryNotifications");
+};
+
+cron.schedule("5 * * * *", runPlanExpiryNotifications, {
+  timezone: "Asia/Kolkata",
+});
+
+setTimeout(runPlanExpiryNotifications, 5000);
 
 /**
  * 📅 7th - Generate Salaries

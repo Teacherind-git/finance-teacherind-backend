@@ -7,8 +7,9 @@ const cronLogger = createLogger({
     format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
     format.errors({ stack: true }),
     format.splat(),
-    format.printf(({ timestamp, level, message, stack }) => {
-      return `${timestamp} [${level}]: ${stack || message}`;
+    format.printf(({ timestamp, level, message, stack, ...meta }) => {
+      const metaText = Object.keys(meta).length ? ` ${JSON.stringify(meta)}` : "";
+      return `${timestamp} [${level}]: ${stack || message}${metaText}`;
     })
   ),
   transports: [
@@ -16,6 +17,7 @@ const cronLogger = createLogger({
       filename: path.join("logs", "cron.log"), // ONLY cron logs stored here
       level: "info",
     }),
+    new transports.Console(),
   ],
 });
 

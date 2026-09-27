@@ -26,6 +26,11 @@ async function createPlanExpiryNotifications() {
   // Notify once the day before expiry and once on the expiry date.
   const reminderEndDate = addDays(notificationDate, 1);
 
+  cronLogger.info("Plan expiry check started", {
+    notificationDate,
+    window: `${notificationDate} → ${reminderEndDate}`,
+  });
+
   const plans = await SubjectPlan.findAll({
     where: {
       ended_at: null,
@@ -36,9 +41,20 @@ async function createPlanExpiryNotifications() {
   });
 
   if (!plans.length) {
-    cronLogger.info("No student plans require expiry notifications");
+    cronLogger.info("No student plans require expiry notifications", {
+      window: `${notificationDate} → ${reminderEndDate}`,
+    });
     return;
   }
+
+  cronLogger.info(`Found ${plans.length} plan(s) expiring in window`, {
+    plans: plans.map((plan) => ({
+      planId: plan.id,
+      studentId: plan.student_id,
+      subject: plan.subject_name,
+      expiry: plan.expiry_date,
+    })),
+  });
 
   const students = await SecondaryUser.findAll({
     where: { id: { [Op.in]: plans.map((plan) => plan.student_id) } },
@@ -52,13 +68,32 @@ async function createPlanExpiryNotifications() {
     ]),
   );
 
+  const missingStudentIds = [
+    ...new Set(
+      plans
+        .map((plan) => String(plan.student_id))
+        .filter((studentId) => !studentMap.has(studentId)),
+    ),
+  ];
+  if (missingStudentIds.length) {
+    cronLogger.warn("Skipping plans whose student was not found", {
+      studentIds: missingStudentIds,
+    });
+  }
+
   const users = await PrimaryUser.findAll({
     where: { status: "Active", isDeleted: false },
     attributes: ["id"],
     raw: true,
   });
 
+  if (!users.length) {
+    cronLogger.warn("No active users to notify about plan expiry");
+    return;
+  }
+
   let created = 0;
+  let alreadyExisted = 0;
   for (const user of users) {
     for (const plan of plans) {
       const studentName = studentMap.get(String(plan.student_id));
@@ -80,7 +115,19 @@ async function createPlanExpiryNotifications() {
         },
       });
 
-      if (wasCreated) created++;
+      if (wasCreated) {
+        created++;
+        cronLogger.info("Plan expiry notification created", {
+          notificationId: notification.id,
+          userId: user.id,
+          planId: plan.id,
+          student: studentName,
+          subject: plan.subject_name,
+          expiry: plan.expiry_date,
+        });
+      } else {
+        alreadyExisted++;
+      }
     }
   }
 
@@ -88,6 +135,7 @@ async function createPlanExpiryNotifications() {
     plans: plans.length,
     users: users.length,
     created,
+    alreadyExisted,
   });
 }
 

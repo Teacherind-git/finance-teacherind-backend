@@ -6,7 +6,7 @@ const { sequelizePrimary } = require("../../config/db");
 const logger = require("../../utils/logger");
 const axios = require("axios");
 const { getPaginationParams } = require("../../utils/pagination");
-const { Op, fn, col, literal } = require("sequelize");
+const { Op, literal } = require("sequelize");
 const {
   getActivePackages,
   buildStudentBillBreakdown,
@@ -35,24 +35,42 @@ const getPlanStatus = (expiryDate) => {
   return "Active";
 };
 
-// Fetch the nearest upcoming expiry among each student's active plans (ended_at IS NULL)
+// Expiry to show for a student: the nearest one that hasn't lapsed yet, so a
+// single expired subject doesn't mask other running plans. Only when every
+// plan has lapsed do we fall back to the most recently expired one.
+const pickDisplayExpiry = (expiryDates) => {
+  const dates = expiryDates.filter(Boolean).sort();
+  if (!dates.length) return null;
+
+  const upcoming = dates.find((date) => getDaysUntilExpiry(date) >= 0);
+  return upcoming || dates[dates.length - 1];
+};
+
+// Same rule as pickDisplayExpiry, in SQL, for sorting by plan expiry
+const DISPLAY_EXPIRY_SORT_SQL =
+  "(SELECT COALESCE(MIN(CASE WHEN plan_sort.expiry_date >= CURDATE() THEN plan_sort.expiry_date END), MAX(plan_sort.expiry_date)) FROM subject_plans AS plan_sort WHERE plan_sort.student_id = user.id AND plan_sort.ended_at IS NULL)";
+
+// Display expiry for each student among their active plans (ended_at IS NULL)
 const getNearestPlanExpiryMap = async (studentIds) => {
   if (!studentIds.length) return {};
 
   const plans = await SubjectPlan.findAll({
     where: { student_id: { [Op.in]: studentIds }, ended_at: null },
-    attributes: [
-      "student_id",
-      [fn("MIN", col("expiry_date")), "nearestExpiry"],
-    ],
-    group: ["student_id"],
+    attributes: ["student_id", "expiry_date"],
     raw: true,
   });
 
-  return plans.reduce((acc, plan) => {
-    acc[plan.student_id] = plan.nearestExpiry;
+  const expiriesByStudent = plans.reduce((acc, plan) => {
+    (acc[plan.student_id] ||= []).push(plan.expiry_date);
     return acc;
   }, {});
+
+  return Object.fromEntries(
+    Object.entries(expiriesByStudent).map(([studentId, expiries]) => [
+      studentId,
+      pickDisplayExpiry(expiries),
+    ]),
+  );
 };
 
 /* ================= STATUS HELPERS ================= */
@@ -194,14 +212,7 @@ exports.getAllStudents = async (req, res) => {
 
     const order =
       sortBy === "planExpiry"
-        ? [
-            [
-              literal(
-                "(SELECT MIN(expiry_date) FROM subject_plans AS plan_sort WHERE plan_sort.student_id = user.id AND plan_sort.ended_at IS NULL)",
-              ),
-              sortOrder,
-            ],
-          ]
+        ? [[literal(DISPLAY_EXPIRY_SORT_SQL), sortOrder]]
         : [[sortBy, sortOrder]];
 
     const { count, rows } = await SecondaryUser.findAndCountAll({
@@ -305,12 +316,9 @@ exports.getStudent = async (req, res) => {
 
     const activePlans = plans.filter((plan) => !plan.ended_at);
 
-    const activeExpiries = activePlans
-      .filter((plan) => plan.expiry_date)
-      .map((plan) => plan.expiry_date);
-    const nearestPlanExpiry = activeExpiries.length
-      ? activeExpiries.sort()[0]
-      : null;
+    const nearestPlanExpiry = pickDisplayExpiry(
+      activePlans.map((plan) => plan.expiry_date),
+    );
 
     // Exam sessions are billed at 2 per plan month; use the longest active plan.
     const planMonths = activePlans.length
