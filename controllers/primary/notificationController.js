@@ -1,5 +1,8 @@
 const { Op } = require("sequelize");
 const Notification = require("../../models/primary/Notification");
+const {
+  canSeePlanExpiry,
+} = require("../../utils/cronScripts/createPlanExpiryNotifications");
 
 exports.createNotification = async (req, res) => {
   try {
@@ -43,6 +46,10 @@ exports.createNotification = async (req, res) => {
 exports.getNotifications = async (req, res) => {
   try {
     const where = { userId: req.user.id };
+    // Hide plan expiries from users who no longer qualify (e.g. role changed)
+    if (!canSeePlanExpiry(req.user)) {
+      where.type = { [Op.ne]: "PLAN_EXPIRY" };
+    }
     const [notifications, unreadCount] = await Promise.all([
       Notification.findAll({
         where,

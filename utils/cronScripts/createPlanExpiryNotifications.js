@@ -1,12 +1,19 @@
 const { Op } = require("sequelize");
 const Notification = require("../../models/primary/Notification");
 const PrimaryUser = require("../../models/primary/User");
+const Role = require("../../models/primary/Role");
 const SecondaryUser = require("../../models/secondary/User");
 const SubjectPlan = require("../../models/secondary/SubjectPlan");
 const cronLogger = require("../cronLogger");
 
 const TIME_ZONE = "Asia/Kolkata";
 const DAY_MS = 24 * 60 * 60 * 1000;
+const PLAN_EXPIRY_ROLES = ["SuperAdmin", "Admin"];
+const PLAN_EXPIRY_DEPARTMENT = "Finance";
+
+const canSeePlanExpiry = (user) =>
+  PLAN_EXPIRY_ROLES.includes(user?.role?.name) ||
+  user?.department === PLAN_EXPIRY_DEPARTMENT;
 
 const getDateInTimeZone = (date = new Date()) =>
   new Intl.DateTimeFormat("en-CA", {
@@ -81,8 +88,17 @@ async function createPlanExpiryNotifications() {
     });
   }
 
+  // Only SuperAdmins, Admins and the Finance department see plan expiries.
   const users = await PrimaryUser.findAll({
-    where: { status: "Active", isDeleted: false },
+    where: {
+      status: "Active",
+      isDeleted: false,
+      [Op.or]: [
+        { "$role.name$": { [Op.in]: PLAN_EXPIRY_ROLES } },
+        { department: PLAN_EXPIRY_DEPARTMENT },
+      ],
+    },
+    include: [{ model: Role, as: "role", attributes: [] }],
     attributes: ["id"],
     raw: true,
   });
@@ -140,3 +156,4 @@ async function createPlanExpiryNotifications() {
 }
 
 module.exports = createPlanExpiryNotifications;
+module.exports.canSeePlanExpiry = canSeePlanExpiry;
