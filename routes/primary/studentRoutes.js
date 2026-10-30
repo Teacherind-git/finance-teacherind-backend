@@ -44,6 +44,11 @@ router.get(
   secondaryStudentBillController.getBillsSummary
 );
 router.put(
+  "/secondary-bills/:id",
+  authorizeRoles("SuperAdmin", "Admin", "User"),
+  secondaryStudentBillController.updateBill
+);
+router.put(
   "/secondary-bills/:id/mark-paid",
   authorizeRoles("SuperAdmin", "Admin", "User"),
   secondaryStudentBillController.markBillPaid

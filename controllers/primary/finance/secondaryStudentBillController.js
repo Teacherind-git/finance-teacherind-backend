@@ -14,6 +14,9 @@ const {
   getActivePackages,
   buildStudentBillBreakdown,
   parsePlanMonths,
+  BillAdjustmentError,
+  getEffectiveBreakdown,
+  applyBillAdjustments,
 } = require("../../../utils/secondaryBilling");
 
 const formatDate = (date) => {
@@ -46,6 +49,18 @@ async function generateInvoiceId() {
 exports.generateBill = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Optional exam count chosen when generating; defaults to plan months * 2
+    let examSessions = null;
+    if (req.body?.examSessions != null && req.body.examSessions !== "") {
+      examSessions = Number(req.body.examSessions);
+      if (!Number.isInteger(examSessions) || examSessions < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Exam count must be a whole number of 0 or more",
+        });
+      }
+    }
 
     const student = await SecondaryUser.findOne({
       where: { id, role: 4 },
@@ -95,14 +110,8 @@ exports.generateBill = async (req, res) => {
       });
     }
 
+    // Packages only label the bill; pricing is fee per hour x classes
     const packages = await getActivePackages();
-
-    if (!packages.length) {
-      return res.status(500).json({
-        success: false,
-        message: "No active package found to calculate rate",
-      });
-    }
 
     // Exam sessions = 2 per plan month; use the longest active plan.
     let planMonths = 1;
@@ -132,7 +141,21 @@ exports.generateBill = async (req, res) => {
       totalAmount,
       perClassRate,
       primaryPackage,
-    } = await buildStudentBillBreakdown(id, subjects, packages, planMonths);
+      missingFeeSubjects,
+    } = await buildStudentBillBreakdown(
+      id,
+      subjects,
+      packages,
+      planMonths,
+      examSessions,
+    );
+
+    if (missingFeeSubjects.length) {
+      return res.status(400).json({
+        success: false,
+        message: `No fee per hour set for ${missingFeeSubjects.join(", ")} in this student's class range. Add it in Fee Structure first.`,
+      });
+    }
 
     if (totalAmount <= 0) {
       return res.status(400).json({
@@ -159,6 +182,9 @@ exports.generateBill = async (req, res) => {
         packageName: primaryPackage?.name || null,
       },
       amount: totalAmount,
+      grossAmount: totalAmount,
+      examSessions: examFee?.sessions || 0,
+      examAmount: examFee?.amount || 0,
       billDate,
       dueDate,
       status: "Generated",
@@ -228,7 +254,7 @@ exports.getAllBills = async (req, res) => {
 
     const { page, limit, offset, sortBy, sortOrder } = getPaginationParams(
       req,
-      ["createdAt", "billDate", "amount", "status"],
+      ["createdAt", "updatedAt", "billDate", "amount", "status", "studentName"],
       "createdAt",
     );
 
@@ -280,6 +306,112 @@ exports.getAllBills = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to fetch bills" });
+  }
+};
+
+/* ================= EDIT SECONDARY STUDENT BILL ================= */
+// Body: { subjects: [{ subjectId, discount }], examFee: { sessions }, discount, note }
+// Class counts and rates can't be changed. Any field left out keeps its current value.
+exports.updateBill = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const bill = await SecondaryStudentBill.findOne({
+      where: { id, isDeleted: false },
+    });
+
+    if (!bill) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Bill not found" });
+    }
+
+    if (bill.status === "Paid") {
+      return res.status(409).json({
+        success: false,
+        message: "Paid bills cannot be edited",
+      });
+    }
+
+    const breakdown = bill.breakdown || {};
+
+    let result;
+    try {
+      result = applyBillAdjustments(breakdown, req.body);
+    } catch (err) {
+      if (err instanceof BillAdjustmentError) {
+        return res.status(400).json({ success: false, message: err.message });
+      }
+      throw err;
+    }
+
+    const { adjustments, amount } = result;
+
+    // Shift the outstanding balance by the change in bill amount, so payments
+    // already recorded stay counted.
+    const dueAmount = Number(
+      ((bill.dueAmount || 0) + (amount - bill.amount)).toFixed(2),
+    );
+
+    if (dueAmount < 0) {
+      return res.status(400).json({
+        success: false,
+        message: `New amount (₹${amount}) is less than what has already been paid`,
+      });
+    }
+
+    let status = bill.status;
+    if (dueAmount === 0 && (bill.paidAmount || 0) > 0) status = "Paid";
+
+    await bill.update({
+      amount,
+      dueAmount,
+      status,
+      // before any discount (adjustments.grossAmount is after subject discounts)
+      grossAmount: Number(
+        (adjustments.grossAmount + adjustments.subjectDiscount).toFixed(2),
+      ),
+      subjectDiscount: adjustments.subjectDiscount,
+      billDiscount: adjustments.discount,
+      totalDiscount: Number(
+        (adjustments.subjectDiscount + adjustments.discount).toFixed(2),
+      ),
+      examSessions: adjustments.examFee.sessions,
+      examAmount: adjustments.examFee.amount,
+      extraExams: 0,
+      extraExamAmount: 0,
+      adjustmentNote: adjustments.note,
+      editedBy: req.user?.id || null,
+      editedAt: new Date(),
+      breakdown: {
+        ...breakdown,
+        adjustments: {
+          ...adjustments,
+          updatedBy: req.user?.id || null,
+          updatedAt: new Date(),
+        },
+      },
+      updatedBy: req.user?.id || null,
+    });
+
+    logger.info("Secondary student bill edited", {
+      billId: bill.id,
+      previousAmount: bill.previous("amount"),
+      amount,
+      subjectDiscount: adjustments.subjectDiscount,
+      billDiscount: adjustments.discount,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Bill updated successfully",
+      data: bill,
+    });
+  } catch (error) {
+    logger.error("Error updating secondary student bill", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to update bill" });
   }
 };
 
@@ -422,18 +554,24 @@ const getSecondaryInvoiceData = async (billId) => {
 
   if (!bill) return null;
 
-  const subjects = bill.breakdown?.subjects || [];
-  const examFee = bill.breakdown?.examFee;
+  // Edited lines when the bill has been edited, otherwise as generated
+  const effective = getEffectiveBreakdown(bill.breakdown || {});
+  const subjects = effective.subjects;
+  const examFee = effective.examFee;
 
   const packageName = bill.breakdown?.packageName || null;
 
   // The bill stores exams as one combined charge; on the invoice we fold it
   // into each subject line instead of a separate "Question Tool Exams" row.
   // Split it across the subject lines so the invoice total is unchanged.
+  const billDiscount = effective.discount || 0;
+
   const subjectCount = subjects.length;
-  const hasExam = examFee?.amount > 0 && subjectCount > 0;
-  const totalExamSessions = hasExam ? examFee.sessions || 0 : 0;
-  const totalExamAmount = hasExam ? examFee.amount || 0 : 0;
+  const examSessionsAll = examFee?.sessions || 0;
+  const examAmountAll = examFee?.amount || 0;
+  const hasExam = examAmountAll > 0 && subjectCount > 0;
+  const totalExamSessions = hasExam ? examSessionsAll : 0;
+  const totalExamAmount = hasExam ? examAmountAll : 0;
 
   let examSessionsLeft = totalExamSessions;
   let examAmountLeft = totalExamAmount;
@@ -441,10 +579,7 @@ const getSecondaryInvoiceData = async (billId) => {
   const items = subjects.map((s, idx) => {
     const isLast = idx === subjectCount - 1;
 
-    // Billed base is the package quota; fall back to classesScheduled for
-    // bills generated before this field existed.
-    const packageClasses =
-      s.packageClasses != null ? s.packageClasses : s.classesScheduled;
+    const packageClasses = s.packageClasses;
     const extraClasses = s.extraClasses || 0;
     const classUnits = packageClasses + extraClasses;
 
@@ -472,31 +607,45 @@ const getSecondaryInvoiceData = async (billId) => {
         ? `${totalSessions} SESSIONS = ${parts.join(" + ")}`
         : `${packageClasses} CLASSES`;
 
+    // Rate is the line's total (classes + exams, before discount) spread
+    // over all its sessions, so rate x sessions - discount = amount.
+    const discount = s.discount || 0;
+    const amount = Number(((s.amount || 0) + examAmount).toFixed(2));
+    const rate = totalSessions
+      ? Number(((amount + discount) / totalSessions).toFixed(2))
+      : 0;
+
     return {
       name,
       description,
       sac: "999299",
       qty: `${totalSessions} SESS`,
-      rate: s.perClassRate,
-      discount: 0,
-      amount: Number(((s.amount || 0) + examAmount).toFixed(2)),
+      rate,
+      discount,
+      amount,
     };
   });
 
   // Fallback: exams exist but there are no subject lines to fold them into.
-  if (examFee?.amount > 0 && subjectCount === 0) {
+  if (examAmountAll > 0 && subjectCount === 0) {
     items.push({
       name: "Question Tool Exams",
-      description: `${examFee.sessions} exam sessions`,
+      description: `${examSessionsAll} exam sessions`,
       sac: "999299",
-      qty: `${examFee.sessions} SESS`,
-      rate: examFee.rate,
+      qty: `${examSessionsAll} SESS`,
+      rate: examFee?.rate || 0,
       discount: 0,
-      amount: examFee.amount,
+      amount: Number(examAmountAll.toFixed(2)),
     });
   }
 
-  const subtotal = items.reduce((sum, i) => sum + i.amount, 0);
+  const subtotal = Number(
+    items.reduce((sum, i) => sum + i.amount, 0).toFixed(2),
+  );
+  const subjectDiscount = Number(
+    items.reduce((sum, i) => sum + (i.discount || 0), 0).toFixed(2),
+  );
+  const total = Number((subtotal - billDiscount).toFixed(2));
 
   return {
     invoiceNo: bill.invoiceId,
@@ -508,9 +657,11 @@ const getSecondaryInvoiceData = async (billId) => {
     },
     items,
     subtotal,
-    totalDiscount: 0,
+    totalDiscount: subjectDiscount,
+    billDiscount,
+    total,
     receivedAmount: bill.paidAmount || 0,
-    amountInWords: toWords(Math.round(subtotal)),
+    amountInWords: toWords(Math.round(total)),
   };
 };
 

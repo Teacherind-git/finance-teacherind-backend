@@ -10,6 +10,9 @@ const logger = require("./logger");
 // replacing the old fixed count of 2.
 const EXAMS_PER_MONTH = 2;
 
+// Fixed price per exam (EXAM_PRICE env, default ₹150)
+const getExamPrice = () => Number(process.env.EXAM_PRICE) || 150;
+
 // Turns a SubjectPlan.plan_type string ("3_month", "1_month", "6_month",
 // "yearly", ...) into a month count. Falls back to 1 when unparseable.
 function parsePlanMonths(planType) {
@@ -98,34 +101,6 @@ async function getFeeRates(subjectIds, classRangeId) {
   return rates;
 }
 
-// Package's monthly price for this subject: feePerHour (class + subject
-// specific) * classesPerMonth * packageMultiplier, discounted by
-// comboMultiplier when billed together with other subjects — mirrors the
-// Package Structure page's formula (base * multiMultiplier when >1 subject
-// selected).
-function getMonthlyPackagePrice(pkg, feePerHour, comboMultiplier = 1) {
-  return (
-    feePerHour * pkg.classesPerMonth * (pkg.packageMultiplier || 1) * comboMultiplier
-  );
-}
-
-// price per session, where a package's total sessions = classes + growth (minus the
-// 1 complimentary growth session already counted in classesPerMonth) + question tool exams
-function getSessionRate(pkg, feePerHour, comboMultiplier = 1) {
-  const totalSessions =
-    pkg.classesPerMonth + (pkg.growthSession || 0) - 1 + (pkg.questionToolExam || 0);
-
-  if (!totalSessions || totalSessions <= 0) return null;
-
-  // Fallback to the package's flat price only when no class/subject-specific
-  // fee is configured, so billing doesn't silently drop to zero.
-  const basis = feePerHour
-    ? getMonthlyPackagePrice(pkg, feePerHour, comboMultiplier)
-    : pkg.price * comboMultiplier;
-
-  return basis / totalSessions;
-}
-
 function findNearestPackage(packages, classesCount) {
   if (!packages.length) return null;
 
@@ -136,7 +111,14 @@ function findNearestPackage(packages, classesCount) {
   }, packages[0]);
 }
 
-function buildBreakdown(subjects, packages, feeRates = {}, planMonths = 1) {
+// examSessions overrides the default count (plan months * 2) when given.
+function buildBreakdown(
+  subjects,
+  packages,
+  feeRates = {},
+  planMonths = 1,
+  examSessions = null,
+) {
   const totalClassesForPackageMatch = subjects.reduce(
     (sum, s) =>
       sum +
@@ -145,16 +127,9 @@ function buildBreakdown(subjects, packages, feeRates = {}, planMonths = 1) {
     0,
   );
 
-  // One package prices the whole subject bundle together — mirrors the
-  // Package Structure page, where a single selected package covers every
-  // chosen subject (rather than each subject picking its own nearest
-  // package independently).
+  // The package is only used to label the bill; pricing comes from the
+  // fee structure alone.
   const primaryPackage = findNearestPackage(packages, totalClassesForPackageMatch);
-
-  // Package Structure discounts the combined total via multiMultiplier once
-  // 2+ subjects are bought together; apply that same discount here.
-  const comboMultiplier =
-    subjects.length > 1 ? primaryPackage?.multiMultiplier || 1 : 1;
 
   const breakdown = subjects.map((s) => {
     const classesScheduled = s.classes_scheduled_current_month || 0;
@@ -162,11 +137,9 @@ function buildBreakdown(subjects, packages, feeRates = {}, planMonths = 1) {
     // scheduled this month. Extra classes are still charged on top.
     const packageClasses = s.package_classes || 0;
     const extraClasses = s.extra_classes_current_month || 0;
-    const feePerHour = feeRates[s.subject_id] || 0;
-
-    const perClassRate = primaryPackage
-      ? getSessionRate(primaryPackage, feePerHour, comboMultiplier) || 0
-      : 0;
+    // Each class is charged at the fee per hour configured for this
+    // class range + subject.
+    const perClassRate = feeRates[s.subject_id] || 0;
 
     const billedClasses = packageClasses + extraClasses;
 
@@ -194,23 +167,30 @@ function buildBreakdown(subjects, packages, feeRates = {}, planMonths = 1) {
     breakdown.reduce((sum, b) => sum + b.amount, 0).toFixed(2),
   );
 
-  // Exam sessions aren't tied to one subject, so bill them at the blended
-  // rate actually earned across this student's subjects/classes rather than
-  // an independent package rate.
+  // Blended class rate across this student's subjects (stored on the bill)
   const perClassRate =
     totalClasses > 0 ? Number((classesAmount / totalClasses).toFixed(2)) : 0;
 
-  // Exam count = plan months * 2 (max across the student's active plans),
-  // not a fixed 2.
-  const examSessions = Math.max(1, Number(planMonths) || 1) * EXAMS_PER_MONTH;
+  // Exam count defaults to plan months * 2 (max across the student's active
+  // plans); each exam is charged at the fixed exam price.
+  const sessions =
+    examSessions != null
+      ? examSessions
+      : Math.max(1, Number(planMonths) || 1) * EXAMS_PER_MONTH;
+  const examRate = getExamPrice();
 
   const examFee = {
-    sessions: examSessions,
-    rate: perClassRate,
-    amount: Number((examSessions * perClassRate).toFixed(2)),
+    sessions,
+    rate: examRate,
+    amount: Number((sessions * examRate).toFixed(2)),
   };
 
   const totalAmount = Number((classesAmount + examFee.amount).toFixed(2));
+
+  // Subjects with classes to bill but no fee configured for this class range
+  const missingFeeSubjects = breakdown
+    .filter((b) => b.billedClasses > 0 && !b.perClassRate)
+    .map((b) => b.subjectName);
 
   return {
     breakdown,
@@ -220,6 +200,7 @@ function buildBreakdown(subjects, packages, feeRates = {}, planMonths = 1) {
     totalAmount,
     perClassRate,
     primaryPackage,
+    missingFeeSubjects,
   };
 }
 
@@ -231,6 +212,7 @@ async function buildStudentBillBreakdown(
   subjects,
   packages,
   planMonths = 1,
+  examSessions = null,
 ) {
   const classRange = await getStudentClassRange(secondaryStudentId);
 
@@ -243,17 +225,158 @@ async function buildStudentBillBreakdown(
   const subjectIds = [...new Set(subjects.map((s) => s.subject_id))];
   const feeRates = await getFeeRates(subjectIds, classRange?.id);
 
-  return buildBreakdown(subjects, packages, feeRates, planMonths);
+  return buildBreakdown(subjects, packages, feeRates, planMonths, examSessions);
+}
+
+/* ---------------- BILL EDITS ---------------- */
+
+const round2 = (n) => Number(Number(n || 0).toFixed(2));
+
+class BillAdjustmentError extends Error {}
+
+const wholeNumber = (value, label) => {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new BillAdjustmentError(`${label} must be a whole number of 0 or more`);
+  }
+  return n;
+};
+
+const money = (value, label) => {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) {
+    throw new BillAdjustmentError(`${label} must be 0 or more`);
+  }
+  return round2(n) || 0; // never store -0
+};
+
+// Bill lines as they currently stand: the edited version when the bill has
+// been edited, otherwise the lines as generated.
+function getEffectiveBreakdown(breakdown = {}) {
+  const adj = breakdown.adjustments;
+
+  if (adj?.subjects) {
+    return {
+      subjects: adj.subjects,
+      examFee: adj.examFee,
+      discount: adj.discount || 0,
+      note: adj.note || null,
+    };
+  }
+
+  return {
+    subjects: (breakdown.subjects || []).map((s) => {
+      const packageClasses =
+        s.packageClasses != null ? s.packageClasses : s.classesScheduled || 0;
+      return {
+        subjectId: s.subjectId,
+        subjectName: s.subjectName,
+        packageName: s.packageName || null,
+        packageClasses,
+        extraClasses: s.extraClasses || 0,
+        perClassRate: s.perClassRate || 0,
+        discount: 0,
+        grossAmount: round2(s.amount),
+        amount: round2(s.amount),
+      };
+    }),
+    examFee: breakdown.examFee || { sessions: 0, rate: 0, amount: 0 },
+    discount: 0,
+    note: null,
+  };
+}
+
+// Validates an edit request against the generated bill and returns the new
+// adjustments block plus the resulting bill amount. Only discounts (per
+// subject and for the whole bill), the exam count and the note can change;
+// class counts and rates always stay as generated. Subjects are matched to
+// the generated lines by subjectId.
+function applyBillAdjustments(breakdown, input = {}) {
+  const current = getEffectiveBreakdown(breakdown);
+  const edits = new Map(
+    (Array.isArray(input.subjects) ? input.subjects : []).map((s) => [
+      String(s.subjectId),
+      s,
+    ]),
+  );
+
+  const subjects = current.subjects.map((s) => {
+    const edit = edits.get(String(s.subjectId)) || {};
+    const label = s.subjectName || "Subject";
+
+    const discount = money(edit.discount ?? s.discount, `${label} discount`);
+    const grossAmount = round2(s.grossAmount);
+
+    if (discount > grossAmount) {
+      throw new BillAdjustmentError(
+        `${label} discount cannot exceed ₹${grossAmount}`,
+      );
+    }
+
+    return {
+      subjectId: s.subjectId,
+      subjectName: s.subjectName,
+      packageName: s.packageName || null,
+      packageClasses: s.packageClasses,
+      extraClasses: s.extraClasses,
+      perClassRate: s.perClassRate,
+      discount,
+      grossAmount,
+      amount: round2(grossAmount - discount),
+    };
+  });
+
+  const examSessions = wholeNumber(
+    input.examFee?.sessions ?? current.examFee?.sessions ?? 0,
+    "Exam count",
+  );
+  // Exams are always charged at the fixed exam price
+  const examRate = getExamPrice();
+  const examFee = {
+    sessions: examSessions,
+    rate: examRate,
+    amount: round2(examSessions * examRate),
+  };
+
+  const subjectsTotal = round2(subjects.reduce((sum, s) => sum + s.amount, 0));
+  const grossAmount = round2(subjectsTotal + examFee.amount);
+
+  const discount = money(input.discount ?? current.discount, "Bill discount");
+  if (discount > grossAmount) {
+    throw new BillAdjustmentError(
+      `Bill discount cannot exceed ₹${grossAmount}`,
+    );
+  }
+
+  const note =
+    input.note !== undefined
+      ? String(input.note || "").trim() || null
+      : current.note;
+
+  return {
+    adjustments: {
+      subjects,
+      examFee,
+      discount,
+      note,
+      subjectDiscount: round2(subjects.reduce((sum, s) => sum + s.discount, 0)),
+      grossAmount,
+    },
+    amount: round2(grossAmount - discount),
+  };
 }
 
 module.exports = {
   EXAMS_PER_MONTH,
+  getExamPrice,
   parsePlanMonths,
   getActivePackages,
   getStudentClassRange,
   getFeeRates,
-  getSessionRate,
   findNearestPackage,
   buildBreakdown,
   buildStudentBillBreakdown,
+  BillAdjustmentError,
+  getEffectiveBreakdown,
+  applyBillAdjustments,
 };

@@ -329,25 +329,23 @@ exports.getStudent = async (req, res) => {
     const subjects = subjectDetails?.data?.subjects;
     if (subjects?.length) {
       const packages = await getActivePackages();
-      if (packages.length) {
-        const {
-          breakdown,
-          totalClasses,
-          examFee,
-          totalAmount,
-          perClassRate,
-          primaryPackage,
-        } = await buildStudentBillBreakdown(id, subjects, packages, planMonths);
-        billing = {
-          packageId: primaryPackage?.id || null,
-          packageName: primaryPackage?.name || null,
-          perClassRate,
-          totalClasses,
-          examFee,
-          totalAmount,
-          breakdown,
-        };
-      }
+      const {
+        breakdown,
+        totalClasses,
+        examFee,
+        totalAmount,
+        perClassRate,
+        primaryPackage,
+      } = await buildStudentBillBreakdown(id, subjects, packages, planMonths);
+      billing = {
+        packageId: primaryPackage?.id || null,
+        packageName: primaryPackage?.name || null,
+        perClassRate,
+        totalClasses,
+        examFee,
+        totalAmount,
+        breakdown,
+      };
     }
 
     res.status(200).json({

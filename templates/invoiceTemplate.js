@@ -5,7 +5,7 @@ module.exports = (data) => `
   <meta charset="UTF-8" />
   <style>
     body {
-      font-family: Arial, sans-serif;
+      font-family: Arial, "Liberation Sans", "Noto Sans", "DejaVu Sans", sans-serif;
       font-size: 12px;
       color: #000;
       margin: 20px;
@@ -161,9 +161,17 @@ module.exports = (data) => `
    
     <!-- TOTALS -->
     <table>
+      ${
+        data.billDiscount
+          ? `<tr>
+        <td>Discount</td>
+        <td class="right">- ₹ ${data.billDiscount}</td>
+      </tr>`
+          : ""
+      }
       <tr>
         <td>Total Amount</td>
-        <td class="right">₹ ${data.subtotal}</td>
+        <td class="right">₹ ${data.total ?? data.subtotal}</td>
       </tr>
     </table>
 

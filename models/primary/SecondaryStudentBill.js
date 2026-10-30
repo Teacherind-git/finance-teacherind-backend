@@ -24,6 +24,22 @@ const SecondaryStudentBill = sequelizePrimary.define(
       },
     },
     amount: { type: DataTypes.FLOAT, allowNull: false },
+    // Discount / edit figures (also kept line-by-line in breakdown.adjustments)
+    grossAmount: { type: DataTypes.FLOAT, allowNull: true }, // before any discount
+    subjectDiscount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+    billDiscount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+    totalDiscount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+    examSessions: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    examAmount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+    extraExams: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    extraExamAmount: { type: DataTypes.FLOAT, allowNull: false, defaultValue: 0 },
+    adjustmentNote: { type: DataTypes.STRING, allowNull: true },
+    editedBy: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: { model: "users", key: "id" },
+    },
+    editedAt: { type: DataTypes.DATE, allowNull: true },
     billDate: { type: DataTypes.DATE, allowNull: false },
     dueDate: { type: DataTypes.DATE, allowNull: false },
     status: {
