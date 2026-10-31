@@ -234,10 +234,12 @@ const round2 = (n) => Number(Number(n || 0).toFixed(2));
 
 class BillAdjustmentError extends Error {}
 
-const wholeNumber = (value, label) => {
+const wholeNumber = (value, label, min = 0) => {
   const n = Number(value);
-  if (!Number.isInteger(n) || n < 0) {
-    throw new BillAdjustmentError(`${label} must be a whole number of 0 or more`);
+  if (!Number.isInteger(n) || n < min) {
+    throw new BillAdjustmentError(
+      `${label} must be a whole number of ${min} or more`,
+    );
   }
   return n;
 };
@@ -329,6 +331,7 @@ function applyBillAdjustments(breakdown, input = {}) {
   const examSessions = wholeNumber(
     input.examFee?.sessions ?? current.examFee?.sessions ?? 0,
     "Exam count",
+    1,
   );
   // Exams are always charged at the fixed exam price
   const examRate = getExamPrice();

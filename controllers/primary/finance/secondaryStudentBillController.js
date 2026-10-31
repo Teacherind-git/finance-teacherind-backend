@@ -54,10 +54,10 @@ exports.generateBill = async (req, res) => {
     let examSessions = null;
     if (req.body?.examSessions != null && req.body.examSessions !== "") {
       examSessions = Number(req.body.examSessions);
-      if (!Number.isInteger(examSessions) || examSessions < 0) {
+      if (!Number.isInteger(examSessions) || examSessions < 1) {
         return res.status(400).json({
           success: false,
-          message: "Exam count must be a whole number of 0 or more",
+          message: "Exam count must be a whole number of 1 or more",
         });
       }
     }
