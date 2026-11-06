@@ -4,11 +4,15 @@ const Subject = require("../../models/primary/Subject");
 const Syllabus = require("../../models/primary/Syllabus");
 const ClassRange = require("../../models/primary/ClassRange");
 const logger = require("../../utils/logger");
+const { syncAcademicData } = require("../../utils/academicSync");
 
 // ✅ Get all classes
 exports.getAllClasses = async (req, res) => {
   try {
     logger.info("Fetching all classes");
+
+    // Pull in rows added/renamed in the question bank
+    await syncAcademicData();
 
     const data = await Class.findAll();
 
@@ -27,6 +31,9 @@ exports.getAllSubjects = async (req, res) => {
   try {
     logger.info("Fetching all subjects");
 
+    // Pull in rows added/renamed in the question bank
+    await syncAcademicData();
+
     const data = await Subject.findAll();
 
     res.status(200).json({ success: true, data });
@@ -44,6 +51,9 @@ exports.getAllSyllabus = async (req, res) => {
   try {
     logger.info("Fetching all syllabus");
 
+    // Pull in rows added/renamed in the question bank
+    await syncAcademicData();
+
     const data = await Syllabus.findAll();
 
     res.status(200).json({ success: true, data });
@@ -60,6 +70,9 @@ exports.getAllSyllabus = async (req, res) => {
 exports.getAllData = async (req, res) => {
   try {
     logger.info("Fetching combined class, subject, syllabus & range data");
+
+    // Pull in rows added/renamed in the question bank
+    await syncAcademicData();
 
     const [classes, subjects, syllabus, classRanges] = await Promise.all([
       // ⭐ Sort classes numerically

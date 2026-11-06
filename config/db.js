@@ -30,6 +30,24 @@ const sequelizeSecondary = new Sequelize(
   }
 );
 
+/* ================= QUESTION BANK DB ================= */
+
+// Source of truth for syllabus / classes / subjects (optional; when not
+// configured the finance DB's own copies are used as-is)
+const sequelizeQuestionBank = process.env.QB_DB_NAME
+  ? new Sequelize(
+      process.env.QB_DB_NAME,
+      process.env.QB_DB_USER,
+      process.env.QB_DB_PASSWORD,
+      {
+        host: process.env.QB_DB_HOST || "localhost",
+        port: process.env.QB_DB_PORT || 3306,
+        dialect: "mysql",
+        logging: false,
+      }
+    )
+  : null;
+
 /* ================= CONNECT DBS ================= */
 
 const connectDBs = async () => {
@@ -53,5 +71,6 @@ const connectDBs = async () => {
 module.exports = {
   sequelizePrimary,
   sequelizeSecondary,
+  sequelizeQuestionBank,
   connectDBs,
 };
